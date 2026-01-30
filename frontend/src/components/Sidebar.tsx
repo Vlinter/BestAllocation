@@ -1,0 +1,463 @@
+import { useState } from 'react';
+import {
+    Box,
+    TextField,
+    Button,
+    Typography,
+    Paper,
+    Chip,
+    IconButton,
+    Tooltip,
+    Divider,
+    Alert,
+    Switch,
+    FormControlLabel,
+    ToggleButton,
+    ToggleButtonGroup,
+} from '@mui/material';
+import {
+    Add as AddIcon,
+    TrendingUp as TrendingUpIcon,
+    Settings as SettingsIcon,
+    AttachMoney as MoneyIcon,
+    CompareArrows as CompareIcon,
+    ShowChart as BenchmarkIcon,
+} from '@mui/icons-material';
+
+interface SidebarProps {
+    onOptimize: (params: OptimizationParams) => void;
+    isLoading: boolean;
+    error: string | null;
+}
+
+export interface OptimizationParams {
+    tickers: string[];
+    startDate: string | null;
+    endDate: string | null;
+    trainingWindow: number;
+    rebalancingWindow: number;
+    transactionCostBps: number;
+    minWeight: number;
+    maxWeight: number;
+    benchmarkType: 'equal_weight' | 'custom';
+    benchmarkTicker: string;
+
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
+    const [tickerInput, setTickerInput] = useState('');
+    const [tickers, setTickers] = useState<string[]>(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV']);
+    const [useFullHistory, setUseFullHistory] = useState(true);
+    const [startDate, setStartDate] = useState('2010-01-01');
+    const [endDate, setEndDate] = useState('');
+    const [trainingWindow, setTrainingWindow] = useState(252);
+    const [rebalancingWindow, setRebalancingWindow] = useState(21);
+    const [transactionCostBps, setTransactionCostBps] = useState(10);
+    const [minWeight, setMinWeight] = useState(0);
+    const [maxWeight, setMaxWeight] = useState(100);
+    // Benchmark settings
+    const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('equal_weight');
+    const [benchmarkTicker, setBenchmarkTicker] = useState('SPY');
+    // CVaR confidence level
+
+
+    // Custom toggle states
+    const [isCustomTraining, setIsCustomTraining] = useState(false);
+    const [isCustomRebalancing, setIsCustomRebalancing] = useState(false);
+
+    const handleAddTicker = () => {
+        const ticker = tickerInput.trim().toUpperCase();
+        if (ticker && !tickers.includes(ticker)) {
+            setTickers([...tickers, ticker]);
+            setTickerInput('');
+        }
+    };
+
+    const handleRemoveTicker = (tickerToRemove: string) => {
+        setTickers(tickers.filter((t) => t !== tickerToRemove));
+    };
+
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleAddTicker();
+    };
+
+    const handleSubmit = () => {
+        if (tickers.length < 2) return;
+        onOptimize({
+            tickers,
+            startDate: useFullHistory ? null : startDate,
+            endDate: endDate || null,
+            trainingWindow,
+            rebalancingWindow,
+            transactionCostBps,
+            minWeight: minWeight / 100,
+            maxWeight: maxWeight / 100,
+            benchmarkType,
+            benchmarkTicker,
+
+        });
+    };
+
+    return (
+        <Paper
+            elevation={0}
+            sx={{
+                width: { xs: '100%', md: 360 },
+                height: { xs: 'auto', md: '100vh' },
+                minHeight: { xs: 'auto', md: '100vh' },
+                p: { xs: 2, md: 3 },
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                borderRight: { xs: 'none', md: '1px solid' },
+                borderBottom: { xs: '1px solid', md: 'none' },
+                borderColor: 'divider',
+                overflowY: 'auto',
+            }}
+        >
+            {/* Header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                <TrendingUpIcon sx={{ color: 'primary.main', fontSize: 28 }} />
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                    Quant Optimizer
+                </Typography>
+            </Box>
+
+            {/* Compare Badge */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'rgba(167, 139, 250, 0.15)', p: 1.5, borderRadius: 2 }}>
+                <CompareIcon sx={{ color: '#A78BFA' }} />
+                <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#A78BFA' }}>
+                        Compare All Methods
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        HRP, GMV, MDR run simultaneously
+                    </Typography>
+                </Box>
+            </Box>
+
+            <Divider />
+
+            {/* Tickers Section */}
+            <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: '0.7rem' }}>
+                    PORTFOLIO TICKERS
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                    <TextField
+                        size="small"
+                        placeholder="Add ticker..."
+                        value={tickerInput}
+                        onChange={(e) => setTickerInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        sx={{ flex: 1 }}
+                    />
+                    <IconButton onClick={handleAddTicker} color="primary" sx={{ bgcolor: 'rgba(0, 212, 170, 0.1)' }}>
+                        <AddIcon />
+                    </IconButton>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {tickers.map((ticker) => (
+                        <Chip
+                            key={ticker}
+                            label={ticker}
+                            onDelete={() => handleRemoveTicker(ticker)}
+                            size="small"
+                            sx={{
+                                bgcolor: 'rgba(0, 212, 170, 0.15)',
+                                color: 'primary.main',
+                                fontWeight: 600,
+                                '& .MuiChip-deleteIcon': { color: 'primary.main' },
+                            }}
+                        />
+                    ))}
+                </Box>
+                {tickers.length < 2 && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                        At least 2 tickers required
+                    </Typography>
+                )}
+            </Box>
+
+            {/* Benchmark Section */}
+            <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <BenchmarkIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                        BENCHMARK
+                    </Typography>
+                </Box>
+                <ToggleButtonGroup
+                    value={benchmarkType}
+                    exclusive
+                    onChange={(_, v) => v && setBenchmarkType(v)}
+                    size="small"
+                    fullWidth
+                    sx={{ mb: 1 }}
+                >
+                    <ToggleButton value="equal_weight" sx={{ fontSize: '0.7rem', py: 0.5 }}>
+                        Equal Weight (1/N)
+                    </ToggleButton>
+                    <ToggleButton value="custom" sx={{ fontSize: '0.7rem', py: 0.5 }}>
+                        Custom Ticker
+                    </ToggleButton>
+                </ToggleButtonGroup>
+                {benchmarkType === 'custom' && (
+                    <TextField
+                        size="small"
+                        placeholder="e.g., SPY"
+                        value={benchmarkTicker}
+                        onChange={(e) => setBenchmarkTicker(e.target.value.toUpperCase())}
+                        fullWidth
+                        sx={{ mb: 1 }}
+                    />
+                )}
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {benchmarkType === 'equal_weight'
+                        ? 'Fair "Zero Skill" benchmark using your selected tickers'
+                        : 'Compare against a specific market index'}
+                </Typography>
+            </Box>
+
+            {/* Date Range */}
+            <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: '0.7rem' }}>
+                    DATA RANGE
+                </Typography>
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={useFullHistory}
+                            onChange={(e) => setUseFullHistory(e.target.checked)}
+                            color="primary"
+                            size="small"
+                        />
+                    }
+                    label={<Typography variant="body2">Use full history</Typography>}
+                    sx={{ mb: 1 }}
+                />
+                {!useFullHistory && (
+                    <TextField
+                        size="small"
+                        type="date"
+                        label="Start Date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        fullWidth
+                        sx={{ mb: 1 }}
+                    />
+                )}
+                <TextField
+                    size="small"
+                    type="date"
+                    label="End Date (blank = today)"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                />
+            </Box>
+
+            {/* Walk-Forward Settings */}
+            <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <SettingsIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                        WALK-FORWARD SETTINGS
+                    </Typography>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>Training Window</Typography>
+                    <ToggleButtonGroup
+                        value={isCustomTraining ? 'custom' : trainingWindow}
+                        exclusive
+                        onChange={(_, v) => {
+                            if (v === 'custom') {
+                                setIsCustomTraining(true);
+                            } else if (v) {
+                                setIsCustomTraining(false);
+                                setTrainingWindow(v);
+                            }
+                        }}
+                        size="small"
+                        fullWidth
+                        sx={{ mb: 1 }}
+                    >
+                        <ToggleButton value={126} sx={{ fontSize: '0.75rem' }}>6M</ToggleButton>
+                        <ToggleButton value={252} sx={{ fontSize: '0.75rem' }}>1Y</ToggleButton>
+                        <ToggleButton value={378} sx={{ fontSize: '0.75rem' }}>1.5Y</ToggleButton>
+                        <ToggleButton value={504} sx={{ fontSize: '0.75rem' }}>2Y</ToggleButton>
+                        <ToggleButton value="custom" sx={{ fontSize: '0.75rem' }}>Custom</ToggleButton>
+                    </ToggleButtonGroup>
+
+                    {isCustomTraining && (
+                        <TextField
+                            size="small"
+                            type="number"
+                            label="Training Window (Days)"
+                            value={trainingWindow}
+                            onChange={(e) => setTrainingWindow(Number(e.target.value))}
+                            fullWidth
+                            sx={{ mb: 1 }}
+                            InputProps={{ inputProps: { min: 20 } }}
+                        />
+                    )}
+                </Box>
+
+                <Box>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>Rebalancing Frequency</Typography>
+                    <ToggleButtonGroup
+                        value={isCustomRebalancing ? 'custom' : rebalancingWindow}
+                        exclusive
+                        onChange={(_, v) => {
+                            if (v === 'custom') {
+                                setIsCustomRebalancing(true);
+                            } else if (v) {
+                                setIsCustomRebalancing(false);
+                                setRebalancingWindow(v);
+                            }
+                        }}
+                        size="small"
+                        fullWidth
+                    >
+                        <ToggleButton value={5} sx={{ fontSize: '0.75rem' }}>Weekly</ToggleButton>
+                        <ToggleButton value={21} sx={{ fontSize: '0.75rem' }}>Monthly</ToggleButton>
+                        <ToggleButton value={63} sx={{ fontSize: '0.75rem' }}>Quarterly</ToggleButton>
+                        <ToggleButton value="custom" sx={{ fontSize: '0.75rem' }}>Custom</ToggleButton>
+                    </ToggleButtonGroup>
+
+                    {isCustomRebalancing && (
+                        <TextField
+                            size="small"
+                            type="number"
+                            label="Rebalance Every (Days)"
+                            value={rebalancingWindow}
+                            onChange={(e) => setRebalancingWindow(Number(e.target.value))}
+                            fullWidth
+                            sx={{ mt: 1 }}
+                            InputProps={{ inputProps: { min: 1 } }}
+                        />
+                    )}
+                </Box>
+            </Box>
+
+            {/* Transaction Costs */}
+            <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <MoneyIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                        TRANSACTION COSTS
+                    </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                        size="small"
+                        type="number"
+                        label="Cost per rebalance (bps)"
+                        value={transactionCostBps}
+                        onChange={(e) => setTransactionCostBps(Number(e.target.value))}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0, max: 200 } }}
+                    />
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                    <Chip label="Zero (0)" size="small" onClick={() => setTransactionCostBps(0)} clickable variant={transactionCostBps === 0 ? "filled" : "outlined"} color="success" />
+                    <Chip label="Low (10)" size="small" onClick={() => setTransactionCostBps(10)} clickable variant={transactionCostBps === 10 ? "filled" : "outlined"} />
+                    <Chip label="Pro (30)" size="small" onClick={() => setTransactionCostBps(30)} clickable variant={transactionCostBps === 30 ? "filled" : "outlined"} />
+                </Box>
+            </Box>
+
+            {/* Weight Constraints */}
+            <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <SettingsIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                        WEIGHT CONSTRAINTS
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                        size="small"
+                        type="number"
+                        label="Min %"
+                        value={minWeight}
+                        onChange={(e) => setMinWeight(Math.min(Number(e.target.value), maxWeight))}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0, max: 100 } }}
+                    />
+                    <TextField
+                        size="small"
+                        type="number"
+                        label="Max %"
+                        value={maxWeight}
+                        onChange={(e) => setMaxWeight(Math.max(Number(e.target.value), minWeight))}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0, max: 100 } }}
+                    />
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                    {(() => {
+                        // Dynamic Diversification Cap: 1.5x Equal Weight (1/N)
+                        // Rounding to nearest 5% for cleaner UI
+                        const n = tickers.length;
+                        const recommendedMax = n > 0 ? Math.min(100, Math.ceil((100 / n) * 1.5 / 5) * 5) : 25;
+
+                        return (
+                            <Chip
+                                label={`Diversified (Max ${recommendedMax}%)`}
+                                size="small"
+                                onClick={() => { setMinWeight(0); setMaxWeight(recommendedMax); }}
+                                clickable
+                                variant={maxWeight === recommendedMax ? "filled" : "outlined"}
+                                color="primary"
+                            />
+                        );
+                    })()}
+                    <Chip
+                        label="Unconstrained (0-100%)"
+                        size="small"
+                        onClick={() => { setMinWeight(0); setMaxWeight(100); }}
+                        clickable
+                        variant={maxWeight === 100 ? "filled" : "outlined"}
+                    />
+                </Box>
+            </Box>
+
+            {/* CVaR Confidence Level Removed for GMV */}
+
+            {/* Error */}
+            {error && <Alert severity="error">{error}</Alert>}
+
+            {/* Submit */}
+            <Box sx={{ mt: 'auto', pt: 2 }}>
+                <Tooltip title={tickers.length < 2 ? 'Add at least 2 tickers' : ''}>
+                    <span>
+                        <Button
+                            variant="contained"
+                            fullWidth
+                            size="large"
+                            onClick={handleSubmit}
+                            disabled={isLoading || tickers.length < 2}
+                            startIcon={<CompareIcon />}
+                            sx={{
+                                py: 1.5,
+                                fontSize: '1rem',
+                                background: 'linear-gradient(135deg, #A78BFA 0%, #7C3AED 100%)',
+                                '&:hover': {
+                                    background: 'linear-gradient(135deg, #C4B5FD 0%, #8B5CF6 100%)',
+                                },
+                            }}
+                        >
+                            {isLoading ? 'Running 3 Strategies...' : 'Compare All Methods'}
+                        </Button>
+                    </span>
+                </Tooltip>
+            </Box>
+        </Paper>
+    );
+};
+
+export default Sidebar;

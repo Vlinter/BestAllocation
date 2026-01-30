@@ -1,0 +1,11 @@
+# Railway monorepo configuration
+# This file tells Railway how to deploy both frontend and backend
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
