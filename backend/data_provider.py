@@ -4,78 +4,7 @@ from typing import List, Optional, Tuple
 from fastapi import HTTPException
 from datetime import datetime
 import os
-import time
 from joblib import Memory
-
-
-def download_with_retry(tickers, max_retries=3, **kwargs):
-    """
-    Wrapper for yf.download with retry logic for cloud environments.
-    Uses yf.Ticker for individual downloads to avoid batch blocking.
-    """
-    import requests
-    
-    # Set a browser-like User-Agent to avoid being blocked
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-    }
-    
-    session = requests.Session()
-    session.headers.update(headers)
-    
-    # Handle single ticker case
-    if isinstance(tickers, str):
-        tickers = [tickers]
-    
-    # Try batch download first with threads=False (sometimes helps)
-    for attempt in range(max_retries):
-        try:
-            data = yf.download(
-                tickers, 
-                session=session, 
-                threads=False,  # Disable threading to avoid rate limiting
-                **kwargs
-            )
-            if not data.empty:
-                return data
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
-        except Exception as e:
-            print(f"Batch attempt {attempt + 1} failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
-    
-    # Fallback: try individual ticker downloads
-    print("Falling back to individual ticker downloads...")
-    all_data = {}
-    for ticker in tickers:
-        for attempt in range(max_retries):
-            try:
-                t = yf.Ticker(ticker, session=session)
-                period = kwargs.get('period')
-                start = kwargs.get('start')
-                end = kwargs.get('end')
-                
-                if period:
-                    hist = t.history(period=period)
-                else:
-                    hist = t.history(start=start, end=end)
-                
-                if not hist.empty:
-                    all_data[ticker] = hist['Close']
-                    break
-            except Exception as e:
-                print(f"Ticker {ticker} attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-    
-    if all_data:
-        return pd.DataFrame(all_data)
-    
-    # Final fallback - return empty DataFrame
-    return pd.DataFrame()
 
 # ============================================================================
 # Caching Configuration
@@ -107,6 +36,8 @@ def get_risk_free_rate() -> float:
     except Exception as e:
         print(f"Warning: Could not fetch Risk Free Rate ({e}), using default 4.5%")
     # Fallback to reasonable default
+    return 0.045
+
 @memory.cache
 def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.Series:
     """
@@ -117,9 +48,9 @@ def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Opt
         # T-Bill ^IRX
         ticker = "^IRX"
         if start_date is None:
-            data = download_with_retry(ticker, period="max", progress=False, auto_adjust=True)
+            data = yf.download(ticker, period="max", progress=False, auto_adjust=True)
         else:
-            data = download_with_retry(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+            data = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
             
         if data.empty:
             print("Warning: Could not fetch ^IRX history. Returning empty Series.")
@@ -164,10 +95,10 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
     try:
         # Use "max" period if no start date specified
         if start_date is None:
-            data = download_with_retry(tickers, period="max", progress=False, auto_adjust=True)
+            data = yf.download(tickers, period="max", progress=False, auto_adjust=True)
         else:
             end = end_date if end_date else datetime.now().strftime("%Y-%m-%d")
-            data = download_with_retry(tickers, start=start_date, end=end, progress=False, auto_adjust=True)
+            data = yf.download(tickers, start=start_date, end=end, progress=False, auto_adjust=True)
         
         if data.empty:
             raise HTTPException(status_code=400, detail=f"No data found for tickers: {tickers}")
