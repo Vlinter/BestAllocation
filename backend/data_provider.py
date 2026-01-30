@@ -11,34 +11,71 @@ from joblib import Memory
 def download_with_retry(tickers, max_retries=3, **kwargs):
     """
     Wrapper for yf.download with retry logic for cloud environments.
-    Yahoo Finance sometimes blocks cloud server IPs.
+    Uses yf.Ticker for individual downloads to avoid batch blocking.
     """
     import requests
     
     # Set a browser-like User-Agent to avoid being blocked
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
     }
     
-    # Apply headers to yfinance session
     session = requests.Session()
     session.headers.update(headers)
     
+    # Handle single ticker case
+    if isinstance(tickers, str):
+        tickers = [tickers]
+    
+    # Try batch download first with threads=False (sometimes helps)
     for attempt in range(max_retries):
         try:
-            data = yf.download(tickers, session=session, **kwargs)
+            data = yf.download(
+                tickers, 
+                session=session, 
+                threads=False,  # Disable threading to avoid rate limiting
+                **kwargs
+            )
             if not data.empty:
                 return data
-            # If empty, wait and retry
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                time.sleep(2 ** attempt)
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {e}")
+            print(f"Batch attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
     
-    # Final attempt without catching
-    return yf.download(tickers, session=session, **kwargs)
+    # Fallback: try individual ticker downloads
+    print("Falling back to individual ticker downloads...")
+    all_data = {}
+    for ticker in tickers:
+        for attempt in range(max_retries):
+            try:
+                t = yf.Ticker(ticker, session=session)
+                period = kwargs.get('period')
+                start = kwargs.get('start')
+                end = kwargs.get('end')
+                
+                if period:
+                    hist = t.history(period=period)
+                else:
+                    hist = t.history(start=start, end=end)
+                
+                if not hist.empty:
+                    all_data[ticker] = hist['Close']
+                    break
+            except Exception as e:
+                print(f"Ticker {ticker} attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+    
+    if all_data:
+        return pd.DataFrame(all_data)
+    
+    # Final fallback - return empty DataFrame
+    return pd.DataFrame()
 
 # ============================================================================
 # Caching Configuration
