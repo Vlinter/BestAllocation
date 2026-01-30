@@ -13,9 +13,20 @@ def download_with_retry(tickers, max_retries=3, **kwargs):
     Wrapper for yf.download with retry logic for cloud environments.
     Yahoo Finance sometimes blocks cloud server IPs.
     """
+    import requests
+    
+    # Set a browser-like User-Agent to avoid being blocked
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
+    # Apply headers to yfinance session
+    session = requests.Session()
+    session.headers.update(headers)
+    
     for attempt in range(max_retries):
         try:
-            data = yf.download(tickers, **kwargs)
+            data = yf.download(tickers, session=session, **kwargs)
             if not data.empty:
                 return data
             # If empty, wait and retry
@@ -27,7 +38,7 @@ def download_with_retry(tickers, max_retries=3, **kwargs):
                 time.sleep(2 ** attempt)
     
     # Final attempt without catching
-    return yf.download(tickers, **kwargs)
+    return yf.download(tickers, session=session, **kwargs)
 
 # ============================================================================
 # Caching Configuration
