@@ -66,9 +66,7 @@ def get_model_params(method: str) -> ModelParams:
 # API Endpoints
 # ============================================================================
 
-@app.get("/")
-async def root():
-    return {"status": "ok", "message": "Quant Portfolio Optimizer API v2.3"}
+# API root moved to /api for production (frontend served at /)
 
 
 @app.get("/health")
