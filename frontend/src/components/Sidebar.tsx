@@ -108,11 +108,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                 p: { xs: 2, md: 3 },
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 2,
+                gap: { xs: 2.5, md: 2 },
                 borderRight: { xs: 'none', md: '1px solid' },
                 borderBottom: { xs: '1px solid', md: 'none' },
                 borderColor: 'divider',
                 overflowY: 'auto',
+                pb: { xs: 4, md: 3 },
+                WebkitOverflowScrolling: 'touch',
             }}
         >
             {/* Header */}
@@ -193,12 +195,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                     onChange={(_, v) => v && setBenchmarkType(v)}
                     size="small"
                     fullWidth
-                    sx={{ mb: 1 }}
+                    sx={{ mb: 1, flexWrap: { xs: 'wrap', md: 'nowrap' } }}
                 >
-                    <ToggleButton value="equal_weight" sx={{ fontSize: '0.7rem', py: 0.5 }}>
+                    <ToggleButton value="equal_weight" sx={{ fontSize: { xs: '0.65rem', md: '0.7rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>
                         Equal Weight (1/N)
                     </ToggleButton>
-                    <ToggleButton value="custom" sx={{ fontSize: '0.7rem', py: 0.5 }}>
+                    <ToggleButton value="custom" sx={{ fontSize: { xs: '0.65rem', md: '0.7rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>
                         Custom Ticker
                     </ToggleButton>
                 </ToggleButtonGroup>
@@ -283,13 +285,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                         }}
                         size="small"
                         fullWidth
-                        sx={{ mb: 1 }}
+                        sx={{ mb: 1, flexWrap: { xs: 'wrap', md: 'nowrap' } }}
                     >
-                        <ToggleButton value={126} sx={{ fontSize: '0.75rem' }}>6M</ToggleButton>
-                        <ToggleButton value={252} sx={{ fontSize: '0.75rem' }}>1Y</ToggleButton>
-                        <ToggleButton value={378} sx={{ fontSize: '0.75rem' }}>1.5Y</ToggleButton>
-                        <ToggleButton value={504} sx={{ fontSize: '0.75rem' }}>2Y</ToggleButton>
-                        <ToggleButton value="custom" sx={{ fontSize: '0.75rem' }}>Custom</ToggleButton>
+                        <ToggleButton value={126} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 30%', md: 1 } }}>6M</ToggleButton>
+                        <ToggleButton value={252} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 30%', md: 1 } }}>1Y</ToggleButton>
+                        <ToggleButton value={378} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 30%', md: 1 } }}>1.5Y</ToggleButton>
+                        <ToggleButton value={504} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 30%', md: 1 } }}>2Y</ToggleButton>
+                        <ToggleButton value="custom" sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 30%', md: 1 } }}>Custom</ToggleButton>
                     </ToggleButtonGroup>
 
                     {isCustomTraining && (
@@ -321,11 +323,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                         }}
                         size="small"
                         fullWidth
+                        sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' } }}
                     >
-                        <ToggleButton value={5} sx={{ fontSize: '0.75rem' }}>Weekly</ToggleButton>
-                        <ToggleButton value={21} sx={{ fontSize: '0.75rem' }}>Monthly</ToggleButton>
-                        <ToggleButton value={63} sx={{ fontSize: '0.75rem' }}>Quarterly</ToggleButton>
-                        <ToggleButton value="custom" sx={{ fontSize: '0.75rem' }}>Custom</ToggleButton>
+                        <ToggleButton value={5} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>Weekly</ToggleButton>
+                        <ToggleButton value={21} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>Monthly</ToggleButton>
+                        <ToggleButton value={63} sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>Quarterly</ToggleButton>
+                        <ToggleButton value="custom" sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' }, py: { xs: 1, md: 0.5 }, flex: { xs: '1 0 45%', md: 1 } }}>Custom</ToggleButton>
                     </ToggleButtonGroup>
 
                     {isCustomRebalancing && (
@@ -363,10 +366,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                         InputProps={{ inputProps: { min: 0, max: 200 } }}
                     />
                 </Box>
-                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                    <Chip label="Zero (0)" size="small" onClick={() => setTransactionCostBps(0)} clickable variant={transactionCostBps === 0 ? "filled" : "outlined"} color="success" />
-                    <Chip label="Low (10)" size="small" onClick={() => setTransactionCostBps(10)} clickable variant={transactionCostBps === 10 ? "filled" : "outlined"} />
-                    <Chip label="Pro (30)" size="small" onClick={() => setTransactionCostBps(30)} clickable variant={transactionCostBps === 30 ? "filled" : "outlined"} />
+                <Box sx={{ display: 'flex', gap: { xs: 1, md: 0.5 }, mt: 0.5, flexWrap: 'wrap' }}>
+                    <Chip label="Zero (0)" size="small" onClick={() => setTransactionCostBps(0)} clickable variant={transactionCostBps === 0 ? "filled" : "outlined"} color="success" sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.75rem', md: '0.8125rem' } }} />
+                    <Chip label="Low (10)" size="small" onClick={() => setTransactionCostBps(10)} clickable variant={transactionCostBps === 10 ? "filled" : "outlined"} sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.75rem', md: '0.8125rem' } }} />
+                    <Chip label="Pro (30)" size="small" onClick={() => setTransactionCostBps(30)} clickable variant={transactionCostBps === 30 ? "filled" : "outlined"} sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.75rem', md: '0.8125rem' } }} />
                 </Box>
             </Box>
 
@@ -398,7 +401,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                         InputProps={{ inputProps: { min: 0, max: 100 } }}
                     />
                 </Box>
-                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                <Box sx={{ display: 'flex', gap: { xs: 1, md: 0.5 }, mt: 0.5, flexWrap: 'wrap' }}>
                     {(() => {
                         // Dynamic Diversification Cap: 1.5x Equal Weight (1/N)
                         // Rounding to nearest 5% for cleaner UI
@@ -413,15 +416,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
                                 clickable
                                 variant={maxWeight === recommendedMax ? "filled" : "outlined"}
                                 color="primary"
+                                sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
                             />
                         );
                     })()}
                     <Chip
-                        label="Unconstrained (0-100%)"
+                        label="Unconstrained"
                         size="small"
                         onClick={() => { setMinWeight(0); setMaxWeight(100); }}
                         clickable
                         variant={maxWeight === 100 ? "filled" : "outlined"}
+                        sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
                     />
                 </Box>
             </Box>
