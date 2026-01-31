@@ -212,7 +212,8 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
         if start_date is None:
-            start_date = (datetime.now() - timedelta(days=3650)).strftime("%Y-%m-%d")
+            # Fetch maximum available history (since 1990)
+            start_date = "1990-01-01"
         
         # Fetch data for each ticker
         all_data = {}
