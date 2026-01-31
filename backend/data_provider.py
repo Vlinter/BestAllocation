@@ -15,7 +15,11 @@ import time
 TIINGO_API_KEY = os.environ.get("TIINGO_API_KEY", "54ca10d47b712bee420fba733caf5eca073742cd")
 TIINGO_BASE_URL = "https://api.tiingo.com"
 
-# Rate limiting: Tiingo free tier has generous limits but we add small delay
+# FRED API - for Treasury rates (risk-free rate)
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "38f9d5b857b45bead3fc3de623332e1a")
+FRED_BASE_URL = "https://api.stlouisfed.org/fred"
+
+# Rate limiting
 RATE_LIMIT_DELAY = 0.2  # 200ms between calls
 
 # ============================================================================
@@ -98,22 +102,83 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> pd.Seri
 
 
 # ============================================================================
-# Dynamic Risk-Free Rate from Treasury
+# Dynamic Risk-Free Rate from Treasury (FRED API)
 # ============================================================================
+
+def fetch_fred_series(series_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.Series:
+    """
+    Fetch a data series from FRED API.
+    """
+    params = {
+        "series_id": series_id,
+        "api_key": FRED_API_KEY,
+        "file_type": "json"
+    }
+    
+    if start_date:
+        params["observation_start"] = start_date
+    if end_date:
+        params["observation_end"] = end_date
+    
+    try:
+        url = f"{FRED_BASE_URL}/series/observations"
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "observations" not in data:
+            print(f"No observations for FRED series {series_id}")
+            return pd.Series(dtype=float)
+        
+        observations = data["observations"]
+        if not observations:
+            return pd.Series(dtype=float)
+        
+        # Convert to Series
+        dates = [obs["date"] for obs in observations]
+        values = [float(obs["value"]) if obs["value"] != "." else None for obs in observations]
+        
+        series = pd.Series(values, index=pd.to_datetime(dates))
+        series = series.dropna()
+        
+        return series
+        
+    except Exception as e:
+        print(f"Error fetching FRED series {series_id}: {e}")
+        return pd.Series(dtype=float)
+
 
 @memory.cache
 def get_risk_free_rate() -> float:
     """
-    Get current risk-free rate.
-    Uses a reasonable default.
+    Get current 3-Month Treasury Bill rate from FRED.
+    DTB3 = 3-Month Treasury Bill Secondary Market Rate
+    Returns annualized rate as decimal.
     """
-    return 0.045  # 4.5%
+    try:
+        # Fetch last 30 days to ensure we get a recent value
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        
+        series = fetch_fred_series("DTB3", start_date, end_date)
+        
+        if not series.empty:
+            # DTB3 is already in percentage (e.g., 4.5 = 4.5%), convert to decimal
+            rate = series.iloc[-1] / 100
+            print(f"Current T-Bill rate from FRED: {rate:.4f}")
+            return float(rate)
+    except Exception as e:
+        print(f"Error fetching risk-free rate: {e}")
+    
+    # Fallback to reasonable default
+    print("Using default risk-free rate: 4.5%")
+    return 0.045
 
 
 @memory.cache  
 def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.Series:
     """
-    Fetch historical risk-free rates.
+    Fetch historical 3-Month Treasury Bill rates from FRED.
     Returns Series of daily annualized rates as decimals (e.g. 0.045).
     """
     if start_date is None:
@@ -121,8 +186,15 @@ def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Opt
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
     
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")
-    return pd.Series(0.045, index=dates)
+    series = fetch_fred_series("DTB3", start_date, end_date)
+    
+    if series.empty:
+        print("Warning: Could not fetch T-Bill history from FRED. Using constant rate.")
+        dates = pd.date_range(start=start_date, end=end_date, freq="B")
+        return pd.Series(0.045, index=dates)
+    
+    # Convert percentage to decimal
+    return series / 100.0
 
 
 # ============================================================================
