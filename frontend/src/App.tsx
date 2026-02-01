@@ -1,6 +1,6 @@
 import { useState, useCallback, lazy, Suspense, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, Typography, Chip, Paper, Alert, AlertTitle, Tabs, Tab, IconButton, Tooltip } from '@mui/material';
-import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, ChevronLeft as ChevronLeftIcon, HelpOutline as HelpIcon } from '@mui/icons-material';
+import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, HelpOutline as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
 import { darkTheme } from './theme';
 import {
   Sidebar,
@@ -87,7 +87,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CompareResponse | null>(null);
   const [activeTab, setActiveTab] = useState(0);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [sidebarMode, setSidebarMode] = useState<'hidden' | 'normal' | 'fullscreen'>('normal');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
 
 
@@ -95,7 +95,10 @@ function App() {
     setActiveTab(newValue);
   };
 
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const toggleSidebarFullscreen = () => {
+    if (sidebarMode === 'fullscreen') setSidebarMode('normal');
+    else setSidebarMode('fullscreen');
+  };
 
   const handleOptimize = useCallback(async (params: OptimizationParams) => {
     setIsLoading(true);
@@ -237,40 +240,64 @@ function App() {
       />
 
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, minHeight: '100vh', bgcolor: 'transparent', position: 'relative', zIndex: 1 }}>
-        {/* Sidebar - collapsible on all screen sizes */}
+        {/* Sidebar - collapsible and expandable */}
         <Box
           sx={{
-            width: { xs: '100%', md: isSidebarOpen ? 360 : 0 },
-            opacity: isSidebarOpen ? 1 : 0,
-            maxHeight: { xs: isSidebarOpen ? '80vh' : 0, md: 'none' },
+            width: sidebarMode === 'fullscreen'
+              ? '100%'
+              : sidebarMode === 'normal'
+                ? { xs: '100%', md: 360 }
+                : 0,
+            opacity: sidebarMode !== 'hidden' ? 1 : 0,
+            maxHeight: sidebarMode === 'hidden' ? 0 : 'none',
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            overflow: 'hidden',
-            borderRight: { xs: 'none', md: isSidebarOpen ? '1px solid rgba(255,255,255,0.05)' : 'none' },
+            overflow: sidebarMode === 'hidden' ? 'hidden' : 'visible',
+            borderRight: sidebarMode === 'normal' ? { xs: 'none', md: '1px solid rgba(255,255,255,0.05)' } : 'none',
             position: 'relative',
             flexShrink: 0,
+            zIndex: sidebarMode === 'fullscreen' ? 100 : 1,
           }}
         >
           <Sidebar onOptimize={handleOptimize} isLoading={isLoading} error={error} />
-          {/* Close button - positioned differently on mobile */}
+          {/* Sidebar controls */}
           <Box
-            onClick={toggleSidebar}
             sx={{
               position: 'absolute',
               top: { xs: 8, md: 16 },
               right: { xs: 8, md: 16 },
-              cursor: 'pointer',
-              color: 'text.secondary',
-              zIndex: 10,
-              bgcolor: 'rgba(0,0,0,0.3)',
-              borderRadius: '50%',
-              p: 0.5,
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              '&:hover': { color: 'white', bgcolor: 'rgba(0,0,0,0.5)' }
+              gap: 0.5,
+              zIndex: 10,
             }}
           >
-            <ChevronLeftIcon sx={{ transform: { xs: 'rotate(-90deg)', md: 'rotate(0deg)' } }} />
+            {/* Fullscreen toggle */}
+            <Tooltip title={sidebarMode === 'fullscreen' ? 'Exit Fullscreen' : 'Fullscreen'}>
+              <IconButton
+                onClick={toggleSidebarFullscreen}
+                size="small"
+                sx={{
+                  color: 'text.secondary',
+                  bgcolor: 'rgba(0,0,0,0.3)',
+                  '&:hover': { color: 'white', bgcolor: 'rgba(0,0,0,0.5)' }
+                }}
+              >
+                {sidebarMode === 'fullscreen' ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            {/* Close/Minimize */}
+            <Tooltip title="Hide Sidebar">
+              <IconButton
+                onClick={() => setSidebarMode('hidden')}
+                size="small"
+                sx={{
+                  color: 'text.secondary',
+                  bgcolor: 'rgba(0,0,0,0.3)',
+                  '&:hover': { color: 'white', bgcolor: 'rgba(0,0,0,0.5)' }
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
 
@@ -297,9 +324,9 @@ function App() {
               gap: 2
             }}
           >
-            {!isSidebarOpen && (
+            {sidebarMode === 'hidden' && (
               <Box
-                onClick={toggleSidebar}
+                onClick={() => setSidebarMode('normal')}
                 sx={{
                   cursor: 'pointer',
                   display: 'flex',
