@@ -46,7 +46,7 @@ export interface OptimizationParams {
 
 const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
     const [tickerInput, setTickerInput] = useState('');
-    const [tickers, setTickers] = useState<string[]>(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV']);
+    const [tickers, setTickers] = useState<string[]>(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV', 'TLT']);
     const [useFullHistory, setUseFullHistory] = useState(true);
     const [startDate, setStartDate] = useState('2010-01-01');
     const [endDate, setEndDate] = useState('');
@@ -54,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
     const [rebalancingWindow, setRebalancingWindow] = useState(21);
     const [transactionCostBps, setTransactionCostBps] = useState(10);
     const [minWeight, setMinWeight] = useState(0);
-    const [maxWeight, setMaxWeight] = useState(100);
+    const [maxWeight, setMaxWeight] = useState(25); // Default: Diversified (1.5x equal weight for 6 tickers)
     // Benchmark settings
     const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('equal_weight');
     const [benchmarkTicker, setBenchmarkTicker] = useState('SPY');

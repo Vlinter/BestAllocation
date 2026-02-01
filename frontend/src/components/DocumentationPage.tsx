@@ -23,6 +23,8 @@ import {
     AccountTree as AccountTreeIcon,
     Shield as ShieldIcon,
     ShowChart as ShowChartIcon,
+    Fullscreen as FullscreenIcon,
+    FullscreenExit as FullscreenExitIcon,
 } from '@mui/icons-material';
 
 interface DocumentationPageProps {
@@ -32,6 +34,7 @@ interface DocumentationPageProps {
 
 const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) => {
     const [expanded, setExpanded] = useState<string | false>('panel1');
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     const handleChange = (panel: string) => (_event: React.SyntheticEvent, isExpanded: boolean) => {
         setExpanded(isExpanded ? panel : false);
@@ -69,9 +72,10 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
             onClose={onClose}
             PaperProps={{
                 sx: {
-                    width: { xs: '100%', sm: 500, md: 600 },
+                    width: isFullscreen ? '100%' : { xs: '100%', sm: 500, md: 600 },
                     bgcolor: '#0D1117',
                     backgroundImage: 'none',
+                    transition: 'width 0.3s ease',
                 }
             }}
         >
@@ -91,13 +95,21 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                             Documentation
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            Guide complet du Portfolio Optimizer
+                            Complete Guide to the Portfolio Optimizer
                         </Typography>
                     </Box>
                 </Box>
-                <IconButton onClick={onClose} sx={{ color: 'text.secondary' }}>
-                    <CloseIcon />
-                </IconButton>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <IconButton
+                        onClick={() => setIsFullscreen(!isFullscreen)}
+                        sx={{ color: 'text.secondary', '&:hover': { color: '#A78BFA' } }}
+                    >
+                        {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                    </IconButton>
+                    <IconButton onClick={onClose} sx={{ color: 'text.secondary' }}>
+                        <CloseIcon />
+                    </IconButton>
+                </Box>
             </Box>
 
             {/* Content */}
@@ -109,22 +121,22 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <SectionTitle icon={<PlayArrowIcon sx={{ color: '#00D4AA' }} />} title="Démarrage Rapide" />
+                        <SectionTitle icon={<PlayArrowIcon sx={{ color: '#00D4AA' }} />} title="Quick Start" />
                     </AccordionSummary>
                     <AccordionDetails>
                         <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                            <strong>1. Ajouter des tickers</strong><br />
-                            Entrez les symboles de vos ETFs/actions (ex: SPY, QQQ, GLD) dans la barre de saisie et appuyez sur Entrée ou le bouton +.
+                            <strong>1. Add Tickers</strong><br />
+                            Enter your ETF/stock symbols (e.g., SPY, QQQ, GLD) in the input field and press Enter or click the + button.
                         </Typography>
                         <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                            <strong>2. Configurer les paramètres</strong><br />
-                            • <strong>Training Window</strong> : Période d'apprentissage (1 an par défaut)<br />
-                            • <strong>Rebalancing</strong> : Fréquence de rééquilibrage (mensuel par défaut)<br />
-                            • <strong>Coûts de transaction</strong> : Frais en basis points (10 bps = 0.1%)
+                            <strong>2. Configure Parameters</strong><br />
+                            • <strong>Training Window</strong>: Learning period for the model (1 year by default)<br />
+                            • <strong>Rebalancing</strong>: How often to update portfolio weights (monthly by default)<br />
+                            • <strong>Transaction Costs</strong>: Fees in basis points (10 bps = 0.1%)
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            <strong>3. Lancer l'optimisation</strong><br />
-                            Cliquez sur "Compare All Methods" pour exécuter les 3 stratégies simultanément et comparer leurs performances.
+                            <strong>3. Run Optimization</strong><br />
+                            Click "Compare All Methods" to run all 3 strategies simultaneously and compare their performance.
                         </Typography>
                     </AccordionDetails>
                 </Accordion>
@@ -138,7 +150,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <SectionTitle icon={<PsychologyIcon sx={{ color: '#A78BFA' }} />} title="Méthodes d'Optimisation" />
+                        <SectionTitle icon={<PsychologyIcon sx={{ color: '#A78BFA' }} />} title="Optimization Methods" />
                     </AccordionSummary>
                     <AccordionDetails>
                         {/* HRP */}
@@ -150,12 +162,12 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                 </Typography>
                             </Box>
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                                Développée par Marcos López de Prado (2016), cette méthode utilise le machine learning
-                                pour regrouper les actifs similaires et distribuer le risque de manière hiérarchique.
+                                Developed by Marcos López de Prado (2016), this method uses machine learning
+                                to cluster similar assets and distribute risk hierarchically.
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                <strong>Avantages :</strong> Robuste, pas besoin d'inverser la matrice de covariance,
-                                résistant au bruit dans les données.
+                                <strong>Advantages:</strong> Robust, no need to invert the covariance matrix,
+                                resistant to noise in data.
                             </Typography>
                         </Paper>
 
@@ -168,13 +180,13 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                 </Typography>
                             </Box>
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                                Trouve le portefeuille avec la volatilité la plus faible possible, sans se soucier
-                                des rendements attendus. C'est le point le plus à gauche de la frontière efficiente.
+                                Finds the portfolio with the lowest possible volatility, regardless of
+                                expected returns. This is the leftmost point on the efficient frontier.
                             </Typography>
                             <Formula>min w'Σw  subject to  Σw = 1</Formula>
                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                <strong>Avantages :</strong> Simple, ne nécessite pas d'estimer les rendements futurs
-                                (souvent erronés), historiquement performant.
+                                <strong>Advantages:</strong> Simple, doesn't require estimating future returns
+                                (which are often wrong), historically strong performance.
                             </Typography>
                         </Paper>
 
@@ -187,13 +199,13 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                 </Typography>
                             </Box>
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                                La méthode classique de Markowitz (1952). Maximise le ratio de Sharpe en trouvant
-                                le meilleur compromis rendement/risque basé sur les rendements historiques.
+                                The classic Markowitz method (1952). Maximizes the Sharpe ratio by finding
+                                the optimal risk/return trade-off based on historical returns.
                             </Typography>
                             <Formula>max (μ'w - rf) / √(w'Σw)</Formula>
                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                <strong>Attention :</strong> Sensible aux erreurs d'estimation des rendements.
-                                Nous utilisons une moyenne mobile exponentielle (EMA) pour stabiliser les prédictions.
+                                <strong>Caution:</strong> Sensitive to return estimation errors.
+                                We use an exponential moving average (EMA) to stabilize predictions.
                             </Typography>
                         </Paper>
                     </AccordionDetails>
@@ -212,29 +224,29 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     </AccordionSummary>
                     <AccordionDetails>
                         <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                            Le <strong>Walk-Forward Testing</strong> est la méthode de backtest la plus réaliste.
-                            Elle simule exactement ce qui se serait passé si vous aviez utilisé la stratégie en temps réel.
+                            <strong>Walk-Forward Testing</strong> is the most realistic backtesting method.
+                            It simulates exactly what would have happened if you had used the strategy in real-time.
                         </Typography>
 
                         <Paper sx={{ p: 2, mb: 2, bgcolor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                Jour 1 → 252 : Entraînement (calcul des poids)<br />
-                                Jour 253 → 273 : Trading avec ces poids<br />
+                                Day 1 → 252: Training (calculate weights)<br />
+                                Day 253 → 273: Trading with those weights<br />
                                 ─────────────────────────────────<br />
-                                Jour 22 → 273 : Entraînement (nouveaux poids)<br />
-                                Jour 274 → 294 : Trading avec les nouveaux poids<br />
+                                Day 22 → 273: Training (new weights)<br />
+                                Day 274 → 294: Trading with new weights<br />
                                 ─────────────────────────────────<br />
-                                ... et ainsi de suite jusqu'à aujourd'hui
+                                ... and so on until today
                             </Typography>
                         </Paper>
 
                         <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
-                            <strong>Training Window</strong> : Plus cette fenêtre est longue, plus le modèle est stable
-                            mais moins il s'adapte aux changements récents du marché.
+                            <strong>Training Window</strong>: The longer this window, the more stable the model
+                            but the slower it adapts to recent market changes.
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            <strong>Rebalancing Frequency</strong> : Un rééquilibrage fréquent capte mieux les changements
-                            mais génère plus de frais de transaction.
+                            <strong>Rebalancing Frequency</strong>: Frequent rebalancing captures changes better
+                            but generates more transaction costs.
                         </Typography>
                     </AccordionDetails>
                 </Accordion>
@@ -248,14 +260,14 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <SectionTitle icon={<AssessmentIcon sx={{ color: '#10B981' }} />} title="Métriques de Performance" />
+                        <SectionTitle icon={<AssessmentIcon sx={{ color: '#10B981' }} />} title="Performance Metrics" />
                     </AccordionSummary>
                     <AccordionDetails>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Box>
                                 <Chip label="Sharpe Ratio" size="small" sx={{ mb: 0.5, bgcolor: 'rgba(0, 212, 170, 0.2)' }} />
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Rendement excédentaire par unité de risque. Un Sharpe &gt; 1 est bon, &gt; 2 est excellent.
+                                    Excess return per unit of risk. A Sharpe &gt; 1 is good, &gt; 2 is excellent.
                                 </Typography>
                                 <Formula>Sharpe = (Rp - Rf) / σp</Formula>
                             </Box>
@@ -263,32 +275,32 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                             <Box>
                                 <Chip label="Sortino Ratio" size="small" sx={{ mb: 0.5, bgcolor: 'rgba(167, 139, 250, 0.2)' }} />
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Comme le Sharpe mais ne pénalise que la volatilité négative (downside).
-                                    Plus pertinent car les hausses ne sont pas un "risque".
+                                    Like Sharpe but only penalizes downside volatility.
+                                    More relevant because upside moves aren't "risk".
                                 </Typography>
                             </Box>
 
                             <Box>
                                 <Chip label="Max Drawdown" size="small" sx={{ mb: 0.5, bgcolor: 'rgba(239, 68, 68, 0.2)' }} />
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    La pire perte depuis un sommet. Un drawdown de -20% signifie que le portefeuille
-                                    a chuté de 20% depuis son plus haut.
+                                    The worst loss from a peak. A -20% drawdown means the portfolio
+                                    fell 20% from its highest point.
                                 </Typography>
                             </Box>
 
                             <Box>
                                 <Chip label="Calmar Ratio" size="small" sx={{ mb: 0.5, bgcolor: 'rgba(245, 158, 11, 0.2)' }} />
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Rendement annualisé divisé par le max drawdown. Mesure combien de rendement
-                                    vous obtenez pour chaque unité de risque de perte maximale.
+                                    Annualized return divided by max drawdown. Measures how much return
+                                    you get per unit of maximum loss risk.
                                 </Typography>
                             </Box>
 
                             <Box>
                                 <Chip label="Omega Ratio" size="small" sx={{ mb: 0.5, bgcolor: 'rgba(96, 165, 250, 0.2)' }} />
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Ratio des gains au-dessus du seuil vs pertes en-dessous. Un Omega &gt; 1 signifie
-                                    plus de gains que de pertes.
+                                    Ratio of gains above threshold vs losses below. An Omega &gt; 1 means
+                                    more gains than losses.
                                 </Typography>
                             </Box>
                         </Box>
@@ -304,27 +316,27 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <SectionTitle icon={<StorageIcon sx={{ color: '#60A5FA' }} />} title="Sources de Données" />
+                        <SectionTitle icon={<StorageIcon sx={{ color: '#60A5FA' }} />} title="Data Sources" />
                     </AccordionSummary>
                     <AccordionDetails>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Paper sx={{ p: 2, bgcolor: 'rgba(96, 165, 250, 0.1)' }}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#60A5FA', mb: 1 }}>
-                                    Tiingo API - Données de Marché
+                                    Tiingo API - Market Data
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Prix ajustés (dividendes & splits) pour tous les tickers US.
-                                    Historique disponible depuis 1990 pour les ETFs majeurs.
+                                    Adjusted prices (dividends & splits) for all US tickers.
+                                    History available since 1990 for major ETFs.
                                 </Typography>
                             </Paper>
 
                             <Paper sx={{ p: 2, bgcolor: 'rgba(0, 212, 170, 0.1)' }}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#00D4AA', mb: 1 }}>
-                                    FRED API - Taux Sans Risque
+                                    FRED API - Risk-Free Rate
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    Taux des bons du Trésor US à 3 mois (DTB3) de la Federal Reserve.
-                                    Mis à jour quotidiennement et utilisé pour calculer les ratios de Sharpe/Sortino.
+                                    3-month US Treasury Bill rates (DTB3) from the Federal Reserve.
+                                    Updated daily and used to calculate Sharpe/Sortino ratios.
                                 </Typography>
                             </Paper>
                         </Box>
@@ -340,7 +352,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
                 >
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <SectionTitle icon={<MenuBookIcon sx={{ color: '#F472B6' }} />} title="Références Académiques" />
+                        <SectionTitle icon={<MenuBookIcon sx={{ color: '#F472B6' }} />} title="Academic References" />
                     </AccordionSummary>
                     <AccordionDetails>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -352,7 +364,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     "Portfolio Selection" - The Journal of Finance
                                 </Typography>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    Fondement de la théorie moderne du portefeuille (Prix Nobel 1990)
+                                    Foundation of Modern Portfolio Theory (Nobel Prize 1990)
                                 </Typography>
                             </Box>
 
@@ -364,7 +376,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     "Building Diversified Portfolios that Outperform Out-of-Sample"
                                 </Typography>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    Introduction de la méthode HRP (Hierarchical Risk Parity)
+                                    Introduction of the HRP (Hierarchical Risk Parity) method
                                 </Typography>
                             </Box>
 
@@ -376,15 +388,15 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     "Toward Maximum Diversification"
                                 </Typography>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    Fondement du Maximum Diversification Ratio
+                                    Foundation of the Maximum Diversification Ratio
                                 </Typography>
                             </Box>
 
                             <Divider sx={{ my: 1 }} />
 
                             <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', textAlign: 'center' }}>
-                                Ce site est fourni à titre éducatif uniquement.<br />
-                                Les performances passées ne préjugent pas des performances futures.
+                                This site is provided for educational purposes only.<br />
+                                Past performance does not guarantee future results.
                             </Typography>
                         </Box>
                     </AccordionDetails>
