@@ -1,6 +1,6 @@
 import { useState, useCallback, lazy, Suspense, useEffect } from 'react';
-import { ThemeProvider, CssBaseline, Box, Typography, Chip, Paper, Alert, AlertTitle, Tabs, Tab } from '@mui/material';
-import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, ChevronLeft as ChevronLeftIcon } from '@mui/icons-material';
+import { ThemeProvider, CssBaseline, Box, Typography, Chip, Paper, Alert, AlertTitle, Tabs, Tab, IconButton, Tooltip } from '@mui/material';
+import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, ChevronLeft as ChevronLeftIcon, HelpOutline as HelpIcon } from '@mui/icons-material';
 import { darkTheme } from './theme';
 import {
   Sidebar,
@@ -25,6 +25,7 @@ const ReturnsDistributionChart = lazy(() => import('./components/ReturnsDistribu
 const ModelHealthCards = lazy(() => import('./components/ModelHealthCards'));
 const OverfittingChart = lazy(() => import('./components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('./components/OverfittingTable'));
+const DocumentationPage = lazy(() => import('./components/DocumentationPage'));
 
 import type { OptimizationParams } from './components';
 import { startComparisonJob, getJobStatus } from './api/client';
@@ -87,6 +88,7 @@ function App() {
   const [results, setResults] = useState<CompareResponse | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
 
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -315,10 +317,23 @@ function App() {
               </Box>
             )}
 
-            <Box>
-              <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.02em', mb: 1 }}>
-                Strategy Comparison
-              </Typography>
+            <Box sx={{ flex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.02em', mb: 1 }}>
+                  Strategy Comparison
+                </Typography>
+                <Tooltip title="Documentation">
+                  <IconButton
+                    onClick={() => setIsDocsOpen(true)}
+                    sx={{
+                      color: 'text.secondary',
+                      '&:hover': { color: '#A78BFA', bgcolor: 'rgba(167, 139, 250, 0.1)' }
+                    }}
+                  >
+                    <HelpIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2 }}>
                 {/* ... rest of header ... */}
                 <Typography variant="body1" sx={{ color: 'text.secondary' }}>
@@ -773,6 +788,11 @@ function App() {
           </Box>
         </Box>
       </Box>
+
+      {/* Documentation Drawer */}
+      <Suspense fallback={null}>
+        <DocumentationPage open={isDocsOpen} onClose={() => setIsDocsOpen(false)} />
+      </Suspense>
     </ThemeProvider >
   );
 }
