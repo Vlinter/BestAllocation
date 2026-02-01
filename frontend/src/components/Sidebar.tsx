@@ -28,6 +28,7 @@ interface SidebarProps {
     onOptimize: (params: OptimizationParams) => void;
     isLoading: boolean;
     error: string | null;
+    isFullscreen?: boolean;
 }
 
 export interface OptimizationParams {
@@ -44,7 +45,7 @@ export interface OptimizationParams {
 
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFullscreen = false }) => {
     const [tickerInput, setTickerInput] = useState('');
     const [tickers, setTickers] = useState<string[]>(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV', 'TLT']);
     const [useFullHistory, setUseFullHistory] = useState(true);
@@ -102,19 +103,26 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error }) => {
         <Paper
             elevation={0}
             sx={{
-                width: { xs: '100%', md: 360 },
+                width: isFullscreen ? '100%' : { xs: '100%', md: 360 },
                 height: { xs: 'auto', md: '100vh' },
                 minHeight: { xs: 'auto', md: '100vh' },
                 p: { xs: 2, md: 3 },
-                display: 'flex',
-                flexDirection: 'column',
+                display: isFullscreen ? 'grid' : 'flex',
+                gridTemplateColumns: isFullscreen ? 'repeat(auto-fit, minmax(320px, 1fr))' : undefined,
+                flexDirection: isFullscreen ? undefined : 'column',
                 gap: { xs: 2.5, md: 2 },
-                borderRight: { xs: 'none', md: '1px solid' },
+                borderRight: isFullscreen ? 'none' : { xs: 'none', md: '1px solid' },
                 borderBottom: { xs: '1px solid', md: 'none' },
                 borderColor: 'divider',
                 overflowY: 'auto',
                 pb: { xs: 4, md: 3 },
                 WebkitOverflowScrolling: 'touch',
+                alignItems: isFullscreen ? 'start' : 'stretch',
+                alignContent: isFullscreen ? 'start' : 'stretch',
+                '& > *': isFullscreen ? {
+                    minWidth: 280,
+                    maxWidth: 400,
+                } : {},
             }}
         >
             {/* Header */}

@@ -258,7 +258,7 @@ function App() {
             zIndex: sidebarMode === 'fullscreen' ? 100 : 1,
           }}
         >
-          <Sidebar onOptimize={handleOptimize} isLoading={isLoading} error={error} />
+          <Sidebar onOptimize={handleOptimize} isLoading={isLoading} error={error} isFullscreen={sidebarMode === 'fullscreen'} />
           {/* Sidebar controls */}
           <Box
             sx={{
