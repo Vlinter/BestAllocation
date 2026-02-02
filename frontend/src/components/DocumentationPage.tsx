@@ -618,6 +618,84 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
 
                 <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.05)' }} />
 
+                {/* ==================== ADVANCED QUANT FEATURES ==================== */}
+                <Accordion
+                    expanded={expanded === 'panel_quant'}
+                    onChange={handleChange('panel_quant')}
+                    sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
+                >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <SectionTitle icon={<PsychologyIcon sx={{ color: '#F472B6' }} />} title="Advanced Quant Features" />
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+                            We have implemented professional quantitative techniques to improve robustness and reduce overfitting.
+                        </Typography>
+
+                        {/* Volatility Scaling */}
+                        <Paper sx={{ p: 2, mb: 2, bgcolor: 'rgba(167, 139, 250, 0.1)', border: '1px solid rgba(167, 139, 250, 0.3)' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <SpeedIcon sx={{ color: '#A78BFA' }} />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#A78BFA' }}>
+                                    Volatility Scaling (Adaptive Risk)
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>Concept:</strong> Automatically reduces portfolio exposure when market volatility rises.
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                If realized volatility (e.g. 20%) exceeds your Target Volatility (e.g. 10%), the system reduces allocation
+                                to 50% (10/20) and puts the rest in Cash.
+                            </Typography>
+                            <Formula>Scale Factor = Target Vol / Realized Vol</Formula>
+
+                            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0,0,0,0.2)', borderRadius: 1 }}>
+                                <Typography variant="caption" sx={{ color: '#A78BFA' }}>
+                                    Result: Smoother equity curve, smaller drawdowns during crashes, but potentially lower total return in raging bull markets.
+                                </Typography>
+                            </Box>
+                        </Paper>
+
+                        {/* James-Stein Shrinkage */}
+                        <Paper sx={{ p: 2, mb: 2, bgcolor: 'rgba(0, 212, 170, 0.1)', border: '1px solid rgba(0, 212, 170, 0.3)' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <AssessmentIcon sx={{ color: '#00D4AA' }} />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#00D4AA' }}>
+                                    James-Stein Shrinkage (MVO)
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>Problem:</strong> Standard Mean-Variance Optimization chases past winners too aggressively ("max error maximization").
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                <strong>Solution:</strong> We "shrink" expected returns towards the global mean. If Nvidia did +200%, we might model it as +120%
+                                to be conservative. This significantly improves out-of-sample performance and stability.
+                            </Typography>
+                        </Paper>
+
+                        {/* Turnover Smoothing */}
+                        <Paper sx={{ p: 2, bgcolor: 'rgba(96, 165, 250, 0.1)', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <TimelineIcon sx={{ color: '#60A5FA' }} />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#60A5FA' }}>
+                                    Turnover Smoothing
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>Concept:</strong> Avoids drastic portfolio changes. Instead of selling 100% of AAPL instantly,
+                                we blend the new target weights with previous weights.
+                            </Typography>
+                            <Formula>Weight = 0.75 * New + 0.25 * Old</Formula>
+                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                This reduces transaction costs and "whipsaw" losses (buying high/selling low on noise) without significantly hurting performance.
+                            </Typography>
+                        </Paper>
+
+                    </AccordionDetails>
+                </Accordion>
+
+                <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.05)' }} />
+
                 {/* ==================== DATA SOURCES ==================== */}
                 <Accordion
                     expanded={expanded === 'panel5'}

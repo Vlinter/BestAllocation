@@ -15,7 +15,9 @@ export interface CompareRequest {
   // Benchmark options
   benchmark_type: 'equal_weight' | 'custom';
   benchmark_ticker?: string;
-
+  // Volatility Scaling (Quant Enhancement)
+  enable_volatility_scaling?: boolean;
+  target_volatility?: number;
 }
 
 export interface PerformanceMetrics {

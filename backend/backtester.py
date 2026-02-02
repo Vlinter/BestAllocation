@@ -6,9 +6,109 @@ from fastapi import HTTPException
 
 
 from .optimization import get_optimizer, optimize_with_fallback, OptimizationResult
-from .config import TRADING_DAYS_PER_YEAR
+from .config import (
+    TRADING_DAYS_PER_YEAR, TURNOVER_SMOOTHING_FACTOR,
+    TARGET_VOLATILITY, VOLATILITY_LOOKBACK, ENABLE_VOLATILITY_SCALING
+)
 # Import the new helper
 from .metrics import infer_trading_frequency
+
+
+# ============================================================================
+# Quant Enhancement Functions
+# ============================================================================
+
+def smooth_weights(
+    new_weights: Dict[str, float],
+    old_weights: Dict[str, float],
+    smoothing_factor: float = TURNOVER_SMOOTHING_FACTOR
+) -> Dict[str, float]:
+    """
+    Apply exponential smoothing to reduce turnover.
+    
+    Formula: smoothed = (1 - α) × new + α × old
+    
+    Args:
+        new_weights: Target weights from optimizer
+        old_weights: Previous period weights
+        smoothing_factor: 0.0 = full rebalance, 1.0 = no change
+    
+    Returns:
+        Smoothed weights that reduce trading
+    """
+    if not old_weights or smoothing_factor <= 0:
+        return new_weights
+    
+    tickers = set(new_weights.keys()) | set(old_weights.keys())
+    smoothed = {}
+    
+    for t in tickers:
+        new_w = new_weights.get(t, 0.0)
+        old_w = old_weights.get(t, 0.0)
+        smoothed[t] = (1 - smoothing_factor) * new_w + smoothing_factor * old_w
+    
+    # Do NOT renormalize here. 
+    # If new_weights sum to 0 (Cash) and old_weights sum to 1, 
+    # the result should sum to (0.3) -> 30% invested, 70% cash.
+    # Renormalizing would force it back to 100% invested (preventing exit to cash).
+    
+    return smoothed
+
+
+def apply_volatility_scaling(
+    weights: Dict[str, float],
+    returns: pd.DataFrame,
+    target_vol: float = TARGET_VOLATILITY,
+    lookback: int = VOLATILITY_LOOKBACK,
+    trading_days: int = TRADING_DAYS_PER_YEAR
+) -> Tuple[Dict[str, float], float]:
+    """
+    Scale portfolio weights to target a specific volatility.
+    
+    When realized volatility > target, reduce exposure (increase cash).
+    When realized volatility < target, maintain full exposure (but don't lever).
+    
+    Args:
+        weights: Target weights from optimizer
+        returns: Historical returns for vol estimation
+        target_vol: Annualized target volatility (e.g., 0.10 = 10%)
+        lookback: Days for rolling vol estimation
+        trading_days: Annualization factor
+    
+    Returns:
+        (scaled_weights, cash_allocation)
+    """
+    if not weights or sum(weights.values()) < 0.001:
+        return weights, 0.0
+    
+    # Use recent returns for vol estimation
+    recent_returns = returns.iloc[-lookback:] if len(returns) >= lookback else returns
+    
+    if recent_returns.empty:
+        return weights, 0.0
+    
+    # Calculate portfolio volatility with current weights
+    w_vec = np.array([weights.get(col, 0.0) for col in recent_returns.columns])
+    port_returns = recent_returns.values @ w_vec
+    
+    # Annualized volatility
+    realized_vol = np.std(port_returns) * np.sqrt(trading_days)
+    
+    if realized_vol < 1e-6:
+        return weights, 0.0
+    
+    # Calculate scaling factor (cap at 1.0 - no leverage)
+    scale = min(1.0, target_vol / realized_vol)
+    
+    # Scale down weights
+    scaled_weights = {k: v * scale for k, v in weights.items()}
+    cash_allocation = 1.0 - sum(scaled_weights.values())
+    
+    if scale < 1.0:
+        print(f"Vol Scaling: Realized vol {realized_vol:.1%} > Target {target_vol:.1%}. Scale={scale:.2f}, Cash={cash_allocation:.1%}")
+    
+    return scaled_weights, max(0.0, cash_allocation)
+
 
 # ============================================================================
 # Walk-Forward Analysis Engine (Share-Based / Realistic)
@@ -71,6 +171,8 @@ def walk_forward_backtest(
     min_weight: float = 0.0,
     max_weight: float = 1.0,
     cvar_alpha: float = 0.05,
+    enable_volatility_scaling: bool = False,
+    target_volatility: float = 0.12,
     progress_callback = None # Optional callback(float) 0-1
 ) -> Tuple[List[Dict], List[Dict], List[Dict], List[str], Dict, float, float, List[Dict], Dict, float, Optional[Dict]]:
     """
@@ -173,6 +275,24 @@ def walk_forward_backtest(
             print(f"Optimization failed at {current_date}: {e}, using EW")
             target_weights = {t: 1.0/len(tickers) for t in tickers}
             fallback_flag = True
+
+        # =================================================================
+        # QUANT ENHANCEMENTS: Apply smoothing and volatility scaling
+        # =================================================================
+        
+        # 2a. Turnover Smoothing - Reduce trading by blending with previous weights
+        if last_weights:
+            target_weights = smooth_weights(target_weights, last_weights)
+        
+        # 2b. Volatility Scaling - Reduce exposure in high volatility regimes
+        if enable_volatility_scaling and sum(target_weights.values()) > 0.001:
+            target_weights, vol_cash = apply_volatility_scaling(
+                target_weights, 
+                train_returns,
+                target_vol=target_volatility,
+                trading_days=trading_days_per_year
+            )
+            # vol_cash is tracked implicitly (sum of weights < 1)
 
         last_weights = target_weights
 

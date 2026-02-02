@@ -107,6 +107,9 @@ class CompareRequest(BaseModel):
     # Benchmark options
     benchmark_type: Literal["equal_weight", "custom"] = Field(default="equal_weight", description="Type of benchmark")
     benchmark_ticker: Optional[str] = Field(default=None, description="Custom benchmark ticker (e.g., SPY)")
+    # Volatility Scaling (Quant Enhancement)
+    enable_volatility_scaling: bool = Field(default=False, description="Enable adaptive volatility targeting")
+    target_volatility: float = Field(default=0.12, ge=0.05, le=0.30, description="Target annualized volatility (5-30%)")
     # CVaR confidence level
     # cvar_confidence removed/ignored for GMV
     

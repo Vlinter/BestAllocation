@@ -9,12 +9,42 @@ from sklearn.metrics import silhouette_score
 
 from .config import (
     TRADING_DAYS_PER_YEAR, MONTE_CARLO_SIMULATIONS, MONTE_CARLO_SEED,
-    COVARIANCE_CONDITION_NUMBER_THRESHOLD
+    COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY
 )
 
 # ============================================================================
 # Types
 # ============================================================================
+
+
+# ============================================================================
+# James-Stein Shrinkage for Expected Returns
+# ============================================================================
+
+def shrink_expected_returns(mu: pd.Series, shrinkage_intensity: float = RETURN_SHRINKAGE_INTENSITY) -> pd.Series:
+    """
+    Apply James-Stein shrinkage towards the grand mean.
+    
+    This is a key technique used by professional quants to reduce estimation
+    error in expected returns. The sample mean is notoriously noisy, and
+    shrinking towards a common prior (grand mean) reduces overfitting.
+    
+    Formula: μ_shrunk = λ × grand_mean + (1-λ) × sample_mean
+    
+    Args:
+        mu: Sample mean returns (annualized)
+        shrinkage_intensity: 0.0 = raw sample mean, 1.0 = grand mean only
+    
+    Returns:
+        Shrunk expected returns
+    """
+    if len(mu) < 2:
+        return mu
+    
+    grand_mean = mu.mean()
+    shrunk = shrinkage_intensity * grand_mean + (1 - shrinkage_intensity) * mu
+    
+    return shrunk
 
 
 class OptimizationResult:
@@ -355,7 +385,12 @@ def optimize_with_fallback(
              # Dynamic span based on training window size (e.g., 252 -> span=252)
              # This ensures the decay is proportional to the user's chosen lookback.
              dynamic_span = len(returns)
-             mu = expected_returns.ema_historical_return(returns, returns_data=True, frequency=frequency, span=dynamic_span)
+             mu_raw = expected_returns.ema_historical_return(returns, returns_data=True, frequency=frequency, span=dynamic_span)
+             
+             # Apply James-Stein shrinkage to reduce estimation error
+             # This is a key technique used by professional quants
+             mu = shrink_expected_returns(mu_raw)
+             
              S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
              
              # Cash Strategy: If the best asset return is less than Risk Free Rate, Go to Cash (0 weights)

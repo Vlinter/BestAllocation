@@ -140,6 +140,18 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
                         ));
                     })()}
 
+                    {/* Explicit Cash Area - Rendered FIRST so it's at the bottom of the stack */}
+                    <Area
+                        key="Cash"
+                        type="monotone"
+                        dataKey="Cash"
+                        name="Cash / Money Market"
+                        stackId="1"
+                        fill="#64748B" // Slate 500
+                        stroke="#475569"
+                        fillOpacity={0.7}
+                        isAnimationActive={false}
+                    />
                     {tickers.map((ticker, index) => (
                         <Area
                             key={ticker}
@@ -152,19 +164,6 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
                             isAnimationActive={false}
                         />
                     ))}
-                    {/* Explicit Cash Area */}
-                    <Area
-                        key="Cash"
-                        type="monotone"
-                        dataKey="Cash"
-                        name="Cash / Money Market"
-                        stackId="1"
-                        fill="#64748B" // Slate 500
-                        stroke="#475569"
-                        fillOpacity={0.5}
-                        isAnimationActive={false}
-                        style={{ filter: 'grayscale(1)' }}
-                    />
                 </AreaChart>
             </ResponsiveContainer>
         </Paper>

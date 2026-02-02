@@ -14,6 +14,7 @@ import {
     FormControlLabel,
     ToggleButton,
     ToggleButtonGroup,
+    Slider,
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -22,6 +23,7 @@ import {
     AttachMoney as MoneyIcon,
     CompareArrows as CompareIcon,
     ShowChart as BenchmarkIcon,
+    Speed as SpeedIcon,
 } from '@mui/icons-material';
 
 interface SidebarProps {
@@ -42,7 +44,8 @@ export interface OptimizationParams {
     maxWeight: number;
     benchmarkType: 'equal_weight' | 'custom';
     benchmarkTicker: string;
-
+    enableVolatilityScaling: boolean;
+    targetVolatility: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFullscreen = false }) => {
@@ -59,7 +62,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     // Benchmark settings
     const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('equal_weight');
     const [benchmarkTicker, setBenchmarkTicker] = useState('SPY');
-    // CVaR confidence level
+    // Volatility Scaling (Quant Enhancement)
+    const [enableVolatilityScaling, setEnableVolatilityScaling] = useState(false);
+    const [targetVolatility, setTargetVolatility] = useState(12); // 12%
 
 
     // Custom toggle states
@@ -95,7 +100,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
             maxWeight: maxWeight / 100,
             benchmarkType,
             benchmarkTicker,
-
+            enableVolatilityScaling,
+            targetVolatility: targetVolatility / 100,
         });
     };
 
@@ -437,6 +443,53 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
                     />
                 </Box>
+            </Box>
+
+            {/* Volatility Scaling (Quant Enhancement) */}
+            <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <SpeedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                        VOLATILITY SCALING
+                    </Typography>
+                </Box>
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={enableVolatilityScaling}
+                            onChange={(e) => setEnableVolatilityScaling(e.target.checked)}
+                            color="primary"
+                            size="small"
+                        />
+                    }
+                    label={<Typography variant="body2">Enable adaptive risk targeting</Typography>}
+                    sx={{ mb: 1 }}
+                />
+                {enableVolatilityScaling && (
+                    <Box sx={{ px: 1 }}>
+                        <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            Target Volatility: {targetVolatility}%
+                        </Typography>
+                        <Slider
+                            value={targetVolatility}
+                            onChange={(_, v) => setTargetVolatility(v as number)}
+                            min={5}
+                            max={25}
+                            step={1}
+                            marks={[
+                                { value: 5, label: '5%' },
+                                { value: 10, label: '10%' },
+                                { value: 15, label: '15%' },
+                                { value: 20, label: '20%' },
+                                { value: 25, label: '25%' },
+                            ]}
+                            sx={{ mb: 1 }}
+                        />
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            Reduces exposure when market volatility exceeds target
+                        </Typography>
+                    </Box>
+                )}
             </Box>
 
             {/* CVaR Confidence Level Removed for GMV */}

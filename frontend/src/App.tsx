@@ -121,7 +121,8 @@ function App() {
         max_weight: params.maxWeight,
         benchmark_type: params.benchmarkType,
         benchmark_ticker: params.benchmarkTicker,
-        // cvar_confidence no longer used
+        enable_volatility_scaling: params.enableVolatilityScaling,
+        target_volatility: params.targetVolatility,
       });
 
 

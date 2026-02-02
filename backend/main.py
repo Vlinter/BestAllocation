@@ -206,6 +206,8 @@ def _run_strategy(
             min_weight=request.min_weight,
             max_weight=request.max_weight,
             cvar_alpha=cvar_alpha,
+            enable_volatility_scaling=request.enable_volatility_scaling,
+            target_volatility=request.target_volatility,
             progress_callback=progress_callback
         )
         

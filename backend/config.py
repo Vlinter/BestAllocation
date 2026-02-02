@@ -50,3 +50,24 @@ MIN_POINTS_FOR_RELIABLE_SHARPE = 60
 # ============================================================================
 EXTREME_RETURN_THRESHOLD = 0.20  # 20% daily return = suspicious
 STALE_PRICE_DAYS = 5  # Same price for 5+ days = suspicious
+
+# ============================================================================
+# Quant Enhancements
+# ============================================================================
+
+# Return Shrinkage (James-Stein) for MVO
+# 0.0 = use raw sample mean (aggressive/overfitting), 1.0 = use grand mean (conservative)
+# 0.5 is a balanced default - reduces estimation error while preserving signal
+RETURN_SHRINKAGE_INTENSITY = 0.5
+
+# Turnover Smoothing
+# 0.0 = no smoothing (full rebalance), 1.0 = no change (never rebalance)
+# 0.25 provides ~20% turnover reduction without lagging too much
+TURNOVER_SMOOTHING_FACTOR = 0.25
+
+# Volatility Scaling (Adaptive Exposure)
+# Reduces exposure when realized vol > target (goes to cash)
+# DISABLED by default: can confuse users who expect 100% invested
+TARGET_VOLATILITY = 0.12  # 12% = moderate balanced portfolio
+VOLATILITY_LOOKBACK = 63  # 3 months rolling window for vol estimation
+ENABLE_VOLATILITY_SCALING = False  # Set to True for risk-parity style behavior
