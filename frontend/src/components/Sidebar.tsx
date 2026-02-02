@@ -154,6 +154,47 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
 
             <Divider />
 
+            <Divider />
+
+            {/* Presets Section */}
+            <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: '0.7rem' }}>
+                    PRESETS
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => setTickers(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV', 'TLT'])}
+                        sx={{
+                            fontSize: '0.75rem',
+                            textTransform: 'none',
+                            borderColor: 'rgba(255, 255, 255, 0.23)',
+                            color: 'text.primary',
+                            '&:hover': { borderColor: 'primary.main', color: 'primary.main' }
+                        }}
+                    >
+                        AllView
+                    </Button>
+                    <Tooltip title="Diversified Risk Parity (Stocks, Bonds, Gold, Real Estate, Energy)">
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => setTickers(['SPY', 'QQQ', 'TLT', 'GLD', 'IYR', 'XLE', 'EFA'])}
+                            sx={{
+                                fontSize: '0.75rem',
+                                textTransform: 'none',
+                                borderColor: 'rgba(167, 139, 250, 0.5)',
+                                color: '#A78BFA',
+                                '&:hover': { borderColor: '#A78BFA', bgcolor: 'rgba(167, 139, 250, 0.1)' }
+                            }}
+                        >
+                            Ultimate (Pro)
+                        </Button>
+                    </Tooltip>
+                </Box>
+            </Box>
+
             {/* Tickers Section */}
             <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: '0.7rem' }}>

@@ -548,8 +548,15 @@ def get_custom_benchmark(
     """
     Fetch and return a custom benchmark ticker (e.g., SPY).
     Aligns benchmark data with portfolio dates.
+    Uses Tiingo first (reliable), falls back to yfinance (unreliable on cloud).
     """
     benchmark_values = []
+    # Import locally to avoid circular imports if any (though currently safe)
+    # or rely on top-level import if added. 
+    # To be safe and clean, I will assume I added the import at top, 
+    # but I can also import inside here for safety.
+    from .data_provider import fetch_ticker_history
+    
     try:
         portfolio_dates = prices.index[start_offset:]
         if len(portfolio_dates) == 0:
@@ -559,22 +566,33 @@ def get_custom_benchmark(
         end_d = portfolio_dates[-1].strftime("%Y-%m-%d")
         
         ticker = benchmark_ticker.strip().upper()
-        # Fetch data
-        data = yf.download(ticker, start=start_d, end=end_d, progress=False, auto_adjust=True)
         
-        if data.empty:
+        # 1. Try Tiingo (Primary)
+        bench_prices = fetch_ticker_history(ticker, start_d, end_d)
+        
+        # 2. Fallback to yfinance if Tiingo failed
+        if bench_prices.empty:
+            print(f"Tiingo failed for {ticker}, trying yfinance fallback...")
+            try:
+                data = yf.download(ticker, start=start_d, end=end_d, progress=False, auto_adjust=True)
+                if not data.empty:
+                    # Extract Close/Adj Close
+                    if isinstance(data.columns, pd.MultiIndex):
+                        data_close = data["Close"]
+                        if isinstance(data_close, pd.DataFrame):
+                            bench_prices = data_close[ticker] if ticker in data_close else data_close.iloc[:, 0]
+                        else:
+                            bench_prices = data_close
+                    elif "Close" in data.columns:
+                        bench_prices = data["Close"]
+                    else:
+                        bench_prices = data.iloc[:,0]
+            except Exception as e_yf:
+                print(f"yfinance fallback failed for {ticker}: {e_yf}")
+
+        if bench_prices.empty:
+            print(f"Could not fetch benchmark data for {ticker} from any source.")
             return [], benchmark_ticker
-            
-        # Extract Close/Adj Close
-        if isinstance(data.columns, pd.MultiIndex):
-             # Try clean access
-             bench_prices = data["Close"]
-             if isinstance(bench_prices, pd.DataFrame):
-                 bench_prices = bench_prices[ticker] # extract series
-        elif "Close" in data.columns:
-            bench_prices = data["Close"]
-        else:
-            bench_prices = data.iloc[:,0]
             
         # Clean
         bench_prices = pd.to_numeric(bench_prices, errors='coerce').ffill().bfill()
