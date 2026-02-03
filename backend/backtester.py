@@ -1,7 +1,6 @@
 import pandas as pd
 from typing import Tuple, List, Dict, Optional, Union
 import numpy as np
-import yfinance as yf
 from fastapi import HTTPException
 
 
@@ -567,31 +566,11 @@ def get_custom_benchmark(
         
         ticker = benchmark_ticker.strip().upper()
         
-        # 1. Try Tiingo (Primary)
+        # 1. Try Tiingo
         bench_prices = fetch_ticker_history(ticker, start_d, end_d)
         
-        # 2. Fallback to yfinance if Tiingo failed
         if bench_prices.empty:
-            print(f"Tiingo failed for {ticker}, trying yfinance fallback...")
-            try:
-                data = yf.download(ticker, start=start_d, end=end_d, progress=False, auto_adjust=True)
-                if not data.empty:
-                    # Extract Close/Adj Close
-                    if isinstance(data.columns, pd.MultiIndex):
-                        data_close = data["Close"]
-                        if isinstance(data_close, pd.DataFrame):
-                            bench_prices = data_close[ticker] if ticker in data_close else data_close.iloc[:, 0]
-                        else:
-                            bench_prices = data_close
-                    elif "Close" in data.columns:
-                        bench_prices = data["Close"]
-                    else:
-                        bench_prices = data.iloc[:,0]
-            except Exception as e_yf:
-                print(f"yfinance fallback failed for {ticker}: {e_yf}")
-
-        if bench_prices.empty:
-            print(f"Could not fetch benchmark data for {ticker} from any source.")
+            print(f"Could not fetch benchmark data for {ticker} from Tiingo.")
             return [], benchmark_ticker
             
         # Clean
