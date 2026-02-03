@@ -1,4 +1,4 @@
-import { useState, useCallback, lazy, Suspense, useEffect } from 'react';
+import { useState, lazy, Suspense, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, Typography, Chip, Paper, Alert, AlertTitle, Tabs, Tab, IconButton, Tooltip } from '@mui/material';
 import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, HelpOutline as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
 import { darkTheme } from './theme';
@@ -11,6 +11,8 @@ import {
   ErrorBoundary,
   SkeletonLoader,
 } from './components';
+import { useOptimization, useRanking } from './hooks';
+import type { OptimizationParams } from './hooks';
 
 // Lazy load heavy chart components for performance
 const AllocationComparison = lazy(() => import('./components/AllocationComparison'));
@@ -26,10 +28,6 @@ const ModelHealthCards = lazy(() => import('./components/ModelHealthCards'));
 const OverfittingChart = lazy(() => import('./components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('./components/OverfittingTable'));
 const DocumentationPage = lazy(() => import('./components/DocumentationPage'));
-
-import type { OptimizationParams } from './components';
-import { startComparisonJob, getJobStatus } from './api/client';
-import type { CompareResponse } from './api/client';
 
 
 // Optimized Tab Panel: Keeps all tabs mounted to avoid expensive re-renders
@@ -81,11 +79,18 @@ function CustomTabPanel(props: TabPanelProps) {
 }
 
 function App() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingMessage, setLoadingMessage] = useState("Initializing...");
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<CompareResponse | null>(null);
+  // Use custom hooks for optimization and ranking logic
+  const {
+    isLoading,
+    loadingProgress,
+    loadingMessage,
+    results,
+    error,
+    runOptimization,
+  } = useOptimization();
+
+  const globalRanking = useRanking(results);
+
   const [activeTab, setActiveTab] = useState(0);
   const [sidebarMode, setSidebarMode] = useState<'hidden' | 'normal' | 'fullscreen'>('normal');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
@@ -100,131 +105,11 @@ function App() {
     else setSidebarMode('fullscreen');
   };
 
-  const handleOptimize = useCallback(async (params: OptimizationParams) => {
-    setIsLoading(true);
-    setLoadingProgress(0);
-    setLoadingMessage("Starting Job...");
-    setError(null);
-    setActiveTab(0);
-
-
-    try {
-      // 1. Start Job
-      const { job_id } = await startComparisonJob({
-        tickers: params.tickers,
-        start_date: params.startDate,
-        end_date: params.endDate,
-        training_window: params.trainingWindow,
-        rebalancing_window: params.rebalancingWindow,
-        transaction_cost_bps: params.transactionCostBps,
-        min_weight: params.minWeight,
-        max_weight: params.maxWeight,
-        benchmark_type: params.benchmarkType,
-        benchmark_ticker: params.benchmarkTicker,
-        enable_volatility_scaling: params.enableVolatilityScaling,
-        target_volatility: params.targetVolatility,
-      });
-
-
-      // 2. Poll until complete
-      const pollInterval = 500; // 0.5s
-
-      const poll = async () => {
-        try {
-          const status = await getJobStatus(job_id);
-
-          setLoadingProgress(status.progress);
-          setLoadingMessage(status.message);
-
-          if (status.status === 'completed' && status.result) {
-            setResults(status.result);
-            // Allow 100% to be seen for a moment
-            setTimeout(() => setIsLoading(false), 800);
-            return;
-          } else if (status.status === 'failed') {
-            setError(status.error || "Optimization failed");
-            setIsLoading(false);
-            return;
-          }
-
-          // Continue polling if not done
-          if (status.status === 'queued' || status.status === 'processing') {
-            setTimeout(poll, pollInterval);
-          }
-        } catch (err) {
-          // Retry on transient network errors
-          if (isLoading) setTimeout(poll, pollInterval);
-        }
-      };
-
-      poll();
-
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.detail ||
-        err?.message ||
-        'An unexpected error occurred. Please try again.';
-      setError(message);
-      setIsLoading(false);
-    }
-  }, [isLoading]);
-
-  // Calculate global ranking based on multiple metrics
-  const getGlobalRanking = () => {
-    if (!results) return null;
-
-    const metricsToCompare: { key: keyof typeof results.methods[0]['performance_metrics']; higherIsBetter: boolean; label: string }[] = [
-      { key: 'sharpe_ratio', higherIsBetter: true, label: 'Sharpe Ratio' },
-      { key: 'sortino_ratio', higherIsBetter: true, label: 'Sortino Ratio' },
-      { key: 'cagr', higherIsBetter: true, label: 'CAGR' },
-      { key: 'total_return', higherIsBetter: true, label: 'Total Return' },
-      { key: 'max_drawdown', higherIsBetter: false, label: 'Max Drawdown' },
-      { key: 'volatility', higherIsBetter: false, label: 'Volatility' },
-      { key: 'calmar_ratio', higherIsBetter: true, label: 'Calmar Ratio' },
-      { key: 'alpha', higherIsBetter: true, label: 'Alpha' },
-      { key: 'omega_ratio', higherIsBetter: true, label: 'Omega Ratio' },
-      { key: 'win_rate', higherIsBetter: true, label: 'Win Rate' },
-      { key: 'annualized_turnover', higherIsBetter: false, label: 'Turnover' },
-    ];
-
-    // Count wins per method across all metrics
-    const wins: Record<string, { count: number; metrics: string[] }> = {};
-    results.methods.forEach(m => { wins[m.method] = { count: 0, metrics: [] }; });
-
-    metricsToCompare.forEach(metric => {
-      let bestMethod = '';
-      let bestValue = metric.higherIsBetter ? -Infinity : Infinity;
-
-      results.methods.forEach(m => {
-        const value = m.performance_metrics[metric.key] as number;
-        if (metric.higherIsBetter ? value > bestValue : value < bestValue) {
-          bestValue = value;
-          bestMethod = m.method;
-        }
-      });
-
-      if (bestMethod) {
-        wins[bestMethod].count++;
-        wins[bestMethod].metrics.push(metric.label);
-      }
-    });
-
-    // Sort by number of wins
-    const ranking = results.methods
-      .map(m => ({
-        method: m,
-        wins: wins[m.method].count,
-        winningMetrics: wins[m.method].metrics,
-      }))
-      .sort((a, b) => b.wins - a.wins);
-
-    return {
-      ranking,
-      totalMetrics: metricsToCompare.length,
-    };
+  // Handle optimization request from Sidebar
+  const handleOptimize = async (params: OptimizationParams) => {
+    setActiveTab(0); // Reset to overview tab
+    await runOptimization(params);
   };
-
-  const globalRanking = getGlobalRanking();
 
   return (
     <ThemeProvider theme={darkTheme}>

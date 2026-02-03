@@ -72,7 +72,21 @@ def get_model_params(method: str) -> ModelParams:
 @app.get("/health")
 async def health():
     rf_rate = get_risk_free_rate()
-    return {"status": "healthy", "current_risk_free_rate": rf_rate}
+    return {
+        "status": "healthy", 
+        "current_risk_free_rate": rf_rate,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/version")
+async def version():
+    """Return API version info for tracking and debugging."""
+    return {
+        "version": "2.3.0",
+        "methods": ["hrp", "gmv", "mvo"],
+        "features": ["walk_forward", "transaction_costs", "volatility_scaling"]
+    }
 
 
 @app.post("/optimize", response_model=OptimizationResponse)
@@ -168,13 +182,31 @@ async def optimize_portfolio(request: OptimizationRequest):
 # ============================================================================
 
 import uuid
-import uuid
+import logging
 from fastapi import BackgroundTasks
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Simple in-memory job store
-# Structure: job_id -> { "status": str, "progress": int, "message": str, "result": dict, "error": str }
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Simple in-memory job store with TTL
+# Structure: job_id -> { "status": str, "progress": int, "message": str, "result": dict, "error": str, "created_at": datetime }
 jobs = {}
+JOB_TTL_SECONDS = 3600  # 1 hour TTL for completed jobs
+
+def cleanup_expired_jobs():
+    """Remove jobs older than JOB_TTL_SECONDS."""
+    now = datetime.now()
+    expired = [
+        job_id for job_id, job in jobs.items()
+        if job.get("status") in ("completed", "failed") 
+        and (now - job.get("created_at", now)).total_seconds() > JOB_TTL_SECONDS
+    ]
+    for job_id in expired:
+        del jobs[job_id]
+    if expired:
+        logger.info(f"Cleaned up {len(expired)} expired jobs")
 
 def update_job(job_id: str, progress: int, message: str):
     """Update job progress safely."""
@@ -427,7 +459,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         jobs[job_id]["message"] = "Optimization Complete"
 
     except Exception as e:
-        print(f"Job failed: {e}")
+        logger.error(f"Job {job_id} failed: {e}")
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
         jobs[job_id]["message"] = "Failed"
@@ -436,15 +468,20 @@ def run_comparison_job(job_id: str, request: CompareRequest):
 @app.post("/compare/start")
 async def start_compare_job(request: CompareRequest, background_tasks: BackgroundTasks):
     """Start the comparison job in background and return job_id."""
+    # Cleanup expired jobs to prevent memory leaks
+    cleanup_expired_jobs()
+    
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "status": "queued",
         "progress": 0,
         "message": "Initializing...",
         "result": None,
-        "error": None
+        "error": None,
+        "created_at": datetime.now()
     }
     background_tasks.add_task(run_comparison_job, job_id, request)
+    logger.info(f"Started job {job_id} with {len(request.tickers)} tickers")
     return {"job_id": job_id}
 
 
@@ -461,11 +498,6 @@ async def get_job_status(job_id: str):
     
     return job
 
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Railway."""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 # Serve frontend static files in production

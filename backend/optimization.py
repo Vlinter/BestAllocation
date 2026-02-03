@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import logging
 from typing import Dict, List, Tuple, Optional
 from pypfopt import expected_returns, risk_models
 from pypfopt import EfficientFrontier, EfficientCVaR
@@ -11,6 +12,9 @@ from .config import (
     TRADING_DAYS_PER_YEAR, MONTE_CARLO_SIMULATIONS, MONTE_CARLO_SEED,
     COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY
 )
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Types
@@ -105,11 +109,6 @@ def check_covariance_quality(cov_matrix: pd.DataFrame) -> Optional[str]:
     except np.linalg.LinAlgError:
         pass
     return None
-
-
-# ============================================================================
-# NCO Implementation
-# ============================================================================
 
 # ============================================================================
 # HRP Implementation
@@ -222,9 +221,7 @@ def optimize_hrp(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
         return safe_clean_weights(clean_weights), dendrogram_data
         
     except Exception as e:
-        print(f"⚠️  HRP technical error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.warning(f"HRP technical error: {e}")
         # Fallback
         n = len(returns.columns)
         return {col: 1.0 / n for col in returns.columns}, None
@@ -257,7 +254,7 @@ def calculate_dendrogram(corr_matrix: pd.DataFrame) -> Optional[Dict]:
             "leaves": ddata["leaves"]
         }
     except Exception as e:
-        print(f"Dendrogram calculation failed: {e}")
+        logger.warning(f"Dendrogram calculation failed: {e}")
         return None
 
 
@@ -285,7 +282,7 @@ def optimize_mvo(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
             # Check if we have positive returns to support Max Sharpe
             # If all returns are negative, Max Sharpe is undefined/infeasible for standard solvers
             if mu.max() <= 0:
-                print("MVO: All expected returns <= 0. Switching to Min Volatility.")
+                logger.info("MVO: All expected returns <= 0. Switching to Min Volatility.")
                 ef.min_volatility()
             else:
                 # Maximize Sharpe (risk_free_rate=0.0)
@@ -294,7 +291,7 @@ def optimize_mvo(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
         except (ValueError, OptimizationError) as e:
             # Common error: "at least one of the assets must have an expected return exceeding the risk-free rate"
             # In this case, we fallback to Min Volatility (preserve MVO framework but ignore returns)
-            print(f"MVO Max Sharpe failed ({e}). Attempting Min Volatility fallback...")
+            logger.warning(f"MVO Max Sharpe failed ({e}). Attempting Min Volatility fallback...")
             
             # Re-init EF to be clean (though usually safe to reuse, strict re-init is safer)
             ef_retry = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
@@ -306,7 +303,7 @@ def optimize_mvo(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
         return safe_clean_weights(weights)
 
     except Exception as e:
-        print(f"MVO Optimization warning: {e}. Fallback to EW.")
+        logger.warning(f"MVO Optimization warning: {e}. Fallback to EW.")
         n = len(returns.columns)
         return {col: 1.0 / n for col in returns.columns}
 
@@ -329,7 +326,7 @@ def optimize_gmv(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
         return safe_clean_weights(weights)
         
     except Exception as e:
-        print(f"GMV Optimization warning: {e}. Fallback to EW.")
+        logger.warning(f"GMV Optimization warning: {e}. Fallback to EW.")
         n = len(returns.columns)
         return {col: 1.0 / n for col in returns.columns}
 
@@ -396,7 +393,7 @@ def optimize_with_fallback(
              # Cash Strategy: If the best asset return is less than Risk Free Rate, Go to Cash (0 weights)
              # Note: risk_free_rate is annual, mu is annual
              if mu.max() < risk_free_rate:
-                 print(f"MVO: Max expected return ({mu.max():.2%}) < Risk Free ({risk_free_rate:.2%}). Going to Cash.")
+                 logger.info(f"MVO: Max expected return ({mu.max():.2%}) < Risk Free ({risk_free_rate:.2%}). Going to Cash.")
                  # Return 0 weights -> Backtester puts everything in Cash
                  zero_weights = {col: 0.0 for col in returns.columns}
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
@@ -409,7 +406,7 @@ def optimize_with_fallback(
                 
              except (ValueError, OptimizationError) as e:
                  # If Solver fails, USER requests to go to CASH, not Min Vol.
-                 print(f"MVO Max Sharpe solver failed ({e}). Defaulting to Cash.")
+                 logger.warning(f"MVO Max Sharpe solver failed ({e}). Defaulting to Cash.")
                  zero_weights = {col: 0.0 for col in returns.columns}
                  return OptimizationResult(
                     weights=zero_weights, 
@@ -501,5 +498,5 @@ def calculate_efficient_frontier(returns: pd.DataFrame, min_weight: float = 0.0,
         }
         
     except Exception as e:
-        print(f"Efficient Frontier calculation failed: {e}")
+        logger.warning(f"Efficient Frontier calculation failed: {e}")
         return {"assets": [], "curve": [], "simulations": []}

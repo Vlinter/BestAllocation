@@ -147,12 +147,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         Compare All Methods
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        HRP, GMV, MDR run simultaneously
+                        HRP, GMV, MVO run simultaneously
                     </Typography>
                 </Box>
             </Box>
-
-            <Divider />
 
             <Divider />
 
