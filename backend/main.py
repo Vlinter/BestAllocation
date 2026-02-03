@@ -71,10 +71,9 @@ def get_model_params(method: str) -> ModelParams:
 
 @app.get("/health")
 async def health():
-    rf_rate = get_risk_free_rate()
+    """Health check endpoint - must be fast and reliable for Railway."""
     return {
         "status": "healthy", 
-        "current_risk_free_rate": rf_rate,
         "timestamp": datetime.now().isoformat()
     }
 

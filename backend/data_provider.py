@@ -26,7 +26,13 @@ RATE_LIMIT_DELAY = 0.2  # 200ms between calls
 # Caching Configuration
 # ============================================================================
 
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "__cache__")
+# Use environment variable for cache dir, or default based on context
+# Docker uses /app/.cache/joblib (created in Dockerfile)
+# Local development uses __cache__ relative to this file
+CACHE_DIR = os.environ.get(
+    "JOBLIB_CACHE_DIR", 
+    os.path.join(os.path.dirname(__file__), "__cache__")
+)
 memory = Memory(CACHE_DIR, verbose=0)
 
 # ============================================================================
