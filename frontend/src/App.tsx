@@ -22,12 +22,12 @@ const AllocationHistoryChart = lazy(() => import('./components/AllocationHistory
 const EfficientFrontierChart = lazy(() => import('./components/EfficientFrontierChart'));
 const RiskContributionChart = lazy(() => import('./components/RiskContributionChart'));
 const CorrelationHeatmap = lazy(() => import('./components/CorrelationHeatmap'));
-const MonthlyReturnsHeatmap = lazy(() => import('./components/MonthlyReturnsHeatmap'));
 const ReturnsDistributionChart = lazy(() => import('./components/ReturnsDistributionChart'));
 const ModelHealthCards = lazy(() => import('./components/ModelHealthCards'));
 const OverfittingChart = lazy(() => import('./components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('./components/OverfittingTable'));
 const DocumentationPage = lazy(() => import('./components/DocumentationPage'));
+const PerformanceHistogram = lazy(() => import('./components/PerformanceHistogram'));
 
 
 // Optimized Tab Panel: Keeps all tabs mounted to avoid expensive re-renders
@@ -615,6 +615,11 @@ function App() {
                       />
                       <DrawdownComparisonChart methods={results.methods} />
 
+                      {/* Performance Histogram with Month/Year toggle */}
+                      <PerformanceHistogram methods={results.methods} />
+
+                      {/* Returns Distribution */}
+                      <ReturnsDistributionChart methods={results.methods} />
                     </Box>
                   </Suspense>
                 </CustomTabPanel>
@@ -676,12 +681,6 @@ function App() {
                       <ModelHealthCards methods={results.methods} />
 
                       <OverfittingTable methods={results.methods} />
-
-                      {/* Monthly Returns Heatmap */}
-                      <MonthlyReturnsHeatmap methods={results.methods} />
-
-                      {/* Returns Distribution (Gaussian) */}
-                      <ReturnsDistributionChart methods={results.methods} />
 
                       <OverfittingChart
                         datasets={results.methods.map(m => ({

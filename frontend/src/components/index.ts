@@ -25,6 +25,7 @@ export { default as SkeletonLoader } from './SkeletonLoader';
 export { default as MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
 export { default as ReturnsDistributionChart } from './ReturnsDistributionChart';
 export { default as ModelHealthCards } from './ModelHealthCards';
+export { default as PerformanceHistogram } from './PerformanceHistogram';
 
 export type { OptimizationParams } from './Sidebar';
 

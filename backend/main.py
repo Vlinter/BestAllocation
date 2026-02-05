@@ -425,7 +425,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         correlation_matrix = calculate_correlation_matrix(prices)
 
-        update_job(job_id, 90, "Running Monte Carlo Simulations (2,000 runs)...")
+        update_job(job_id, 90, "Running Monte Carlo Simulations (500 runs)...")
         from .optimization import calculate_efficient_frontier
         efficient_frontier_data = calculate_efficient_frontier(
             prices.pct_change().dropna(),

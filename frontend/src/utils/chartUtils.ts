@@ -4,10 +4,10 @@
  * Ideally we would use LTTB, but for simple line charts, picking every Nth point + min/max is often enough.
  * 
  * @param data Array of data points
- * @param targetPoints Maximum number of points to return
+ * @param targetPoints Maximum number of points to return (default: 500 for performance)
  * @returns Downsampled array
  */
-export function downsampleSeries<T>(data: T[], targetPoints: number = 1000): T[] {
+export function downsampleSeries<T>(data: T[], targetPoints: number = 500): T[] {
     if (!data || data.length <= targetPoints) {
         return data;
     }

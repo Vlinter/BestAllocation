@@ -34,7 +34,7 @@ DEFAULT_CVAR_CONFIDENCE = 0.95  # 95% confidence level
 # ============================================================================
 # Monte Carlo Simulation
 # ============================================================================
-MONTE_CARLO_SIMULATIONS = 2000
+MONTE_CARLO_SIMULATIONS = 500  # Reduced from 2000 for performance (sufficient for visualization)
 MONTE_CARLO_SEED = 42  # For reproducibility
 
 # ============================================================================

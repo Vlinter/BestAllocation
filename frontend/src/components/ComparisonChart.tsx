@@ -49,8 +49,8 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
             return dataPoint;
         });
 
-        // Downsample to max 800 points for performance
-        return downsampleSeries(rawData, 800);
+        // Downsample to max 500 points for performance
+        return downsampleSeries(rawData, 500);
     }, [methods, benchmarkCurve]);
 
     // Calculate final returns for display
