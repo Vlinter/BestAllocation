@@ -1,6 +1,6 @@
 import pandas as pd
 import requests
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from fastapi import HTTPException
 from datetime import datetime, timedelta
 import os
@@ -60,10 +60,14 @@ def tiingo_request(endpoint: str, params: dict = None) -> dict | list:
         raise HTTPException(status_code=500, detail=f"Data provider error: {str(e)}")
 
 
-def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> pd.Series:
+def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[pd.Series, pd.Series]:
     """
-    Fetch historical adjusted close prices for a single ticker from Tiingo.
-    Returns a Series with datetime index and close prices.
+    Fetch historical adjusted close AND open prices for a single ticker from Tiingo.
+    Returns: (adjClose series, adjOpen series) with datetime index.
+    
+    For realistic backtesting:
+    - adjClose: Used for optimization and end-of-day valuation
+    - adjOpen: Used for trade execution at T+1
     """
     endpoint = f"/tiingo/daily/{ticker}/prices"
     params = {
@@ -72,19 +76,21 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> pd.Seri
         "resampleFreq": "daily"
     }
     
+    empty_series = pd.Series(dtype=float)
+    
     try:
         data = tiingo_request(endpoint, params)
         
         if not data or not isinstance(data, list):
             print(f"No data for {ticker}")
-            return pd.Series(dtype=float)
+            return empty_series, empty_series
         
         # Create DataFrame from results
         df = pd.DataFrame(data)
         
         if df.empty or "date" not in df.columns:
             print(f"Invalid data format for {ticker}")
-            return pd.Series(dtype=float)
+            return empty_series, empty_series
         
         # Parse date and set as index
         df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
@@ -93,18 +99,30 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> pd.Seri
         # Rate limiting
         time.sleep(RATE_LIMIT_DELAY)
         
-        # Use adjusted close (adjClose) for accurate backtesting
+        # Extract adjusted close (required)
         if "adjClose" in df.columns:
-            return df["adjClose"]
+            adj_close = df["adjClose"]
         elif "close" in df.columns:
-            return df["close"]
+            adj_close = df["close"]
         else:
             print(f"No close price column for {ticker}")
-            return pd.Series(dtype=float)
+            return empty_series, empty_series
+        
+        # Extract adjusted open (for T+1 execution)
+        if "adjOpen" in df.columns:
+            adj_open = df["adjOpen"]
+        elif "open" in df.columns:
+            adj_open = df["open"]
+        else:
+            # Fallback: use adjClose for open (slight approximation, log warning)
+            print(f"Warning: No open price for {ticker}, using adjClose as fallback")
+            adj_open = adj_close
+        
+        return adj_close, adj_open
         
     except Exception as e:
         print(f"Error fetching {ticker}: {e}")
-        return pd.Series(dtype=float)
+        return empty_series, empty_series
 
 
 # ============================================================================
@@ -208,10 +226,15 @@ def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Opt
 # ============================================================================
 
 @memory.cache
-def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Optional[str]) -> Tuple[pd.DataFrame, dict, Optional[str]]:
+def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, str], Optional[str]]:
     """
-    Fetch adjusted close prices from Tiingo API.
-    Returns: (prices DataFrame, ticker_start_dates dict, limiting_ticker str)
+    Fetch adjusted close AND open prices from Tiingo API.
+    
+    Returns:
+        - close_prices: DataFrame of adjusted close prices (for optimization & valuation)
+        - open_prices: DataFrame of adjusted open prices (for T+1 execution)
+        - ticker_start_dates: Dict mapping ticker to first available date
+        - limiting_ticker: The ticker that limits the common date range
     """
     try:
         # Default date range if not specified
@@ -222,18 +245,20 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
             start_date = "1990-01-01"
         
         # Fetch data for each ticker
-        all_data = {}
+        all_close_data = {}
+        all_open_data = {}
         ticker_start_dates = {}
         
         print(f"Fetching data for {len(tickers)} tickers from Tiingo...")
         
         for ticker in tickers:
             print(f"  Fetching {ticker}...")
-            series = fetch_ticker_history(ticker, start_date, end_date)
+            close_series, open_series = fetch_ticker_history(ticker, start_date, end_date)
             
-            if not series.empty:
-                all_data[ticker] = series
-                first_valid = series.first_valid_index()
+            if not close_series.empty:
+                all_close_data[ticker] = close_series
+                all_open_data[ticker] = open_series
+                first_valid = close_series.first_valid_index()
                 if first_valid is not None:
                     ticker_start_dates[ticker] = first_valid.strftime("%Y-%m-%d")
                 else:
@@ -242,19 +267,21 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
                 ticker_start_dates[ticker] = "N/A"
         
         # Check if we got any data
-        if not all_data:
+        if not all_close_data:
             raise HTTPException(status_code=400, detail=f"No data found for tickers: {tickers}")
         
         # Check which tickers failed
-        failed_tickers = [t for t in tickers if t not in all_data]
+        failed_tickers = [t for t in tickers if t not in all_close_data]
         if failed_tickers:
             raise HTTPException(status_code=400, detail=f"No data found for tickers: {failed_tickers}")
         
-        # Combine into DataFrame
-        data = pd.DataFrame(all_data)
+        # Combine into DataFrames
+        close_prices = pd.DataFrame(all_close_data)
+        open_prices = pd.DataFrame(all_open_data)
         
         # Force column names to uppercase
-        data.columns = [str(col).strip().upper() for col in data.columns]
+        close_prices.columns = [str(col).strip().upper() for col in close_prices.columns]
+        open_prices.columns = [str(col).strip().upper() for col in open_prices.columns]
         
         # Find the limiting ticker (starts latest)
         limiting_ticker = None
@@ -268,24 +295,32 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
         # Only keep data from the date when ALL tickers have data
         if latest_start:
             latest_start_date = pd.to_datetime(latest_start)
-            data = data[data.index >= latest_start_date]
+            close_prices = close_prices[close_prices.index >= latest_start_date]
+            open_prices = open_prices[open_prices.index >= latest_start_date]
         
         # Forward fill missing values and drop any remaining NaN
-        data = data.ffill().dropna()
+        close_prices = close_prices.ffill().dropna()
+        open_prices = open_prices.ffill().dropna()
+        
+        # Align indices (ensure both have same dates)
+        common_index = close_prices.index.intersection(open_prices.index)
+        close_prices = close_prices.loc[common_index]
+        open_prices = open_prices.loc[common_index]
         
         # Filter by end_date if specified
         if end_date:
-            data = data[data.index <= end_date]
+            close_prices = close_prices[close_prices.index <= end_date]
+            open_prices = open_prices[open_prices.index <= end_date]
         
-        if len(data) < 60:
+        if len(close_prices) < 60:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Insufficient data: only {len(data)} days available (limiting ticker: {limiting_ticker})"
+                detail=f"Insufficient data: only {len(close_prices)} days available (limiting ticker: {limiting_ticker})"
             )
         
-        print(f"Successfully fetched {len(data)} days of data for {len(tickers)} tickers")
+        print(f"Successfully fetched {len(close_prices)} days of close+open data for {len(tickers)} tickers")
         
-        return data, ticker_start_dates, limiting_ticker
+        return close_prices, open_prices, ticker_start_dates, limiting_ticker
         
     except HTTPException:
         raise

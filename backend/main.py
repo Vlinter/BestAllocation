@@ -107,16 +107,17 @@ async def optimize_portfolio(request: OptimizationRequest):
     end_date = request.end_date if request.end_date else datetime.now().strftime("%Y-%m-%d")
     start_date = request.start_date  # Can be None for full history
     
-    # Fetch data
-    prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
+    # Fetch data (now returns both close and open prices)
+    prices, open_prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
     
     # Infer Frequency
     trading_days_per_year = infer_trading_frequency(prices.index)
 
-    # Run backtest
+    # Run backtest (now with open_prices for T+1 execution)
     (equity_curve, benchmark_curve, allocation_history, rebalance_dates, 
      current_weights, total_costs, total_turnover, _, risk_contributions, benchmark_turnover, dendrogram_data) = walk_forward_backtest(
         prices=prices,
+        open_prices=open_prices,  # NEW: for realistic T+1 execution
         method=request.method,
         training_window=request.training_window,
         rebalancing_window=request.rebalancing_window,
@@ -216,6 +217,7 @@ def update_job(job_id: str, progress: int, message: str):
 def _run_strategy(
     method: str,
     prices: pd.DataFrame,
+    open_prices: pd.DataFrame,  # NEW: for T+1 execution
     request: CompareRequest,
     risk_free_rate: Union[float, pd.Series],
     trading_days_per_year: int,
@@ -229,6 +231,7 @@ def _run_strategy(
          current_weights, total_costs, total_turnover, overfitting_metrics,
          risk_contributions, bench_turnover_val, dendrogram_data_comp) = walk_forward_backtest(
             prices=prices,
+            open_prices=open_prices,  # NEW: for T+1 execution
             method=method,
             training_window=request.training_window,
             rebalancing_window=request.rebalancing_window,
@@ -324,7 +327,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         end_date = request.end_date if request.end_date else datetime.now().strftime("%Y-%m-%d")
         start_date = request.start_date
         
-        prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
+        prices, open_prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
         
         # Infer Frequency
         trading_days_per_year = infer_trading_frequency(prices.index)
@@ -357,7 +360,8 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                 executor.submit(
                     _run_strategy,
                     method, 
-                    prices, 
+                    prices,
+                    open_prices,  # NEW: pass open_prices
                     request, 
                     backtest_rf_input, 
                     trading_days_per_year, 

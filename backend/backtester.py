@@ -162,6 +162,7 @@ def calculate_realized_sharpe_shares(portfolio_values: List[float], annualizatio
 
 def walk_forward_backtest(
     prices: pd.DataFrame,
+    open_prices: pd.DataFrame,  # NEW: Open prices for T+1 execution
     method: str,
     training_window: int,
     rebalancing_window: int,
@@ -177,17 +178,24 @@ def walk_forward_backtest(
     """
     Execute a Walk-Forward Backtest using Share-Based Logic (Realistic).
     
-    Simulates a real trading account:
-    - Calculates target weights based on training data.
-    - Converts weights to NUMBER OF SHARES given current prices.
-    - Holds shares until next rebalance (allowing weights to drift).
-    - Calculates transaction costs on turnover at rebalance points.
+    REALISTIC EXECUTION MODEL:
+    - Optimization: Uses Close prices up to day T (point-in-time, no look-ahead)
+    - Execution: Trades at Open of day T+1 (realistic, can't execute at price just discovered)
+    - Valuation: Uses Close prices for end-of-day portfolio value
+    
+    This eliminates the subtle look-ahead bias present in most backtests.
     """
     tickers = list(prices.columns)
     optimizer = get_optimizer(method)
     
-    # Ensure prices are numeric and handle NaNs if any (ffill)
+    # Ensure prices are numeric and handle NaNs
     prices_clean = prices.apply(pd.to_numeric, errors='coerce').ffill().dropna()
+    open_prices_clean = open_prices.apply(pd.to_numeric, errors='coerce').ffill().dropna()
+    
+    # Align indices
+    common_idx = prices_clean.index.intersection(open_prices_clean.index)
+    prices_clean = prices_clean.loc[common_idx]
+    open_prices_clean = open_prices_clean.loc[common_idx]
     
     if len(prices_clean) < training_window + 1:
         raise HTTPException(status_code=400, detail=f"Not enough data. Need at least {training_window + 1} points.")
@@ -296,30 +304,36 @@ def walk_forward_backtest(
         last_weights = target_weights
 
         # 3. REBALANCE PORTFOLIO
-        # Current Value of Portfolio just before rebalance
-        prices_at_rebalance = prices_clean.iloc[current_idx]
+        # REALISTIC EXECUTION: Execute at Open of T+1 (not Close of T)
+        # This eliminates look-ahead bias - we can't trade at a price we just discovered
+        execution_idx = min(current_idx + 1, len(dates) - 1)
+        execution_date = dates[execution_idx]
+        prices_at_execution = open_prices_clean.iloc[execution_idx]  # Open of T+1
         
-        # Calculate Value of current holdings + Cash (accumulated with interest potentially)
-        value_held_shares = sum(current_shares.get(t, 0.0) * prices_at_rebalance.get(t, 0.0) for t in tickers)
+        # For valuation before trade, use Close of T (current holdings value)
+        prices_at_valuation = prices_clean.iloc[current_idx]  # Close of T
+        
+        # Calculate Value of current holdings at Close(T) + Cash
+        value_held_shares = sum(current_shares.get(t, 0.0) * prices_at_valuation.get(t, 0.0) for t in tickers)
         value_before_trade = value_held_shares + cash_balance
         
-        # Careful: On very first step, value is 1.0 (Cash is implicitly 1.0, shares 0)
-        # But we want to simulate starting with 1.0 total equity.
+        # On first step, we start with 1.0 total equity
         if current_idx == training_window:
             value_before_trade = 1.0
-            cash_balance = 0.0 # Reset effectively, we are re-allocating the initial 1.0
+            cash_balance = 0.0
             
-        # Target Value per asset
+        # Target Value per asset (based on pre-trade value)
         target_values = {t: value_before_trade * target_weights.get(t, 0.0) for t in tickers}
         
-        # Trade: Calculate Turnover and Cost
+        # Calculate Turnover based on execution prices (Open T+1)
         turnover_value = 0.0
         for t in tickers:
-            current_val_t = current_shares.get(t, 0.0) * prices_at_rebalance.get(t, 0.0)
+            # Current value at execution prices
+            current_val_t = current_shares.get(t, 0.0) * prices_at_execution.get(t, 0.0)
             target_val_t = target_values.get(t, 0.0)
             turnover_value += abs(target_val_t - current_val_t)
             
-        # Transaction Cost
+        # Transaction Cost (applied to value)
         cost = turnover_value * transaction_cost_pct
         total_transaction_costs += cost
         total_turnover += turnover_value
@@ -327,11 +341,11 @@ def walk_forward_backtest(
         # Net Investment Value (Value - Cost)
         net_value = value_before_trade - cost
         
-        # Determine New Shares based on Net Value
+        # Determine New Shares based on execution prices (Open T+1)
         new_shares = {}
         invested_value = 0.0
         for t in tickers:
-            p = prices_at_rebalance.get(t)
+            p = prices_at_execution.get(t)  # Open of T+1
             w = target_weights.get(t, 0.0)
             val_to_invest = net_value * w
             if p > 0:
@@ -345,7 +359,7 @@ def walk_forward_backtest(
         # Remaining goes to cash
         cash_balance = max(0.0, net_value - invested_value)
         
-        # Store Allocation
+        # Store Allocation (record the decision date, not execution date)
         alloc_entry = {"date": current_date.strftime("%Y-%m-%d")}
         alloc_entry.update({t: round(target_weights.get(t, 0.0), 4) for t in tickers})
         if fallback_flag:
@@ -355,8 +369,9 @@ def walk_forward_backtest(
         rebalance_dates.append(current_date.strftime("%Y-%m-%d"))
 
         # 4. WALK FORWARD (HOLDING PERIOD)
-        # Calculate portfolio value daily until next rebalance
+        # Start from execution day (T+1) since that's when we actually hold the new positions
         next_rebalance_idx = min(current_idx + rebalancing_window, len(dates))
+        holding_start_idx = execution_idx  # Start from T+1 where we executed
         
         # Set static daily rate if using flat rate
         static_daily_rf = 0.0
@@ -364,9 +379,9 @@ def walk_forward_backtest(
              static_daily_rf = risk_free_rate / trading_days_per_year if trading_days_per_year > 0 else 0.0
         
         period_values = []
-        for d_idx in range(current_idx, next_rebalance_idx):
+        for d_idx in range(holding_start_idx, next_rebalance_idx):
             d_date = dates[d_idx]
-            d_prices = prices_clean.iloc[d_idx]
+            d_prices = prices_clean.iloc[d_idx]  # Close prices for valuation
             
             # Portfolio Value = Sum(Shares * Price) + Cash
             # Note: This naturally handles "drift"
