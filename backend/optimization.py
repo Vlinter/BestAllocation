@@ -2,15 +2,14 @@ import numpy as np
 import pandas as pd
 import logging
 from typing import Dict, List, Tuple, Optional
-from pypfopt import expected_returns, risk_models
-from pypfopt import EfficientFrontier, EfficientCVaR
+from pypfopt import expected_returns, risk_models, objective_functions
+from pypfopt import EfficientFrontier
 from pypfopt.exceptions import OptimizationError
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 
 from .config import (
-    TRADING_DAYS_PER_YEAR, MONTE_CARLO_SIMULATIONS, MONTE_CARLO_SEED,
-    COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY
+    TRADING_DAYS_PER_YEAR,
+    COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY,
+    MVO_L2_GAMMA
 )
 
 # Configure module logger
@@ -68,8 +67,22 @@ class OptimizationResult:
 # ============================================================================
 
 def safe_clean_weights(weights: Dict[str, float]) -> Dict[str, float]:
-    """Ensure weights sum to 1 and handle floating point errors."""
-    return {k: float(v) for k, v in weights.items()}
+    """Ensure weights sum to 1, sanitize NaN/Inf, handle floating point errors."""
+    import math
+    cleaned = {}
+    for k, v in weights.items():
+        fv = float(v)
+        if math.isnan(fv) or math.isinf(fv):
+            fv = 0.0
+        cleaned[k] = fv
+    total = sum(cleaned.values())
+    if total > 0:
+        cleaned = {k: v / total for k, v in cleaned.items()}
+    else:
+        # All weights are zero/NaN — fall back to equal weight
+        n = len(cleaned)
+        cleaned = {k: 1.0 / n for k in cleaned}
+    return cleaned
 
 
 def apply_weight_constraints(weights: Dict[str, float], min_weight: float, max_weight: float) -> Tuple[Dict[str, float], bool]:
@@ -139,9 +152,17 @@ def get_quasi_diag(link):
 def get_allocations(cov):
     """
     Calculate Inverse Variance Portfolio (IVP) weights.
+    Handles zero-variance assets by assigning them near-zero weight.
     """
-    ivp = 1.0 / np.diag(cov)
-    ivp /= ivp.sum()
+    diag = np.diag(cov).copy()
+    # Replace zero/near-zero variances with a large value so 1/diag → ~0 weight
+    diag[diag < 1e-12] = 1e12
+    ivp = 1.0 / diag
+    total = ivp.sum()
+    if total > 0:
+        ivp /= total
+    else:
+        ivp = np.ones(len(diag)) / len(diag)
     return ivp
 
 
@@ -157,6 +178,7 @@ def get_cluster_var(cov, c_items):
 def get_rec_bipart(cov, sort_ix):
     """
     Recursive Bisection: Compute HRP weights.
+    Handles zero-variance clusters gracefully.
     """
     w = pd.Series(1.0, index=sort_ix)
     c_items = [sort_ix] # initialize with all items
@@ -171,7 +193,14 @@ def get_rec_bipart(cov, sort_ix):
             c_var0 = get_cluster_var(cov, c_items0)
             c_var1 = get_cluster_var(cov, c_items1)
             
-            alpha = 1 - c_var0 / (c_var0 + c_var1)
+            denom = c_var0 + c_var1
+            if denom < 1e-16 or np.isnan(denom):
+                alpha = 0.5  # Equal split if both clusters have ~zero variance
+            else:
+                alpha = 1 - c_var0 / denom
+            
+            # Clamp alpha to [0, 1] for safety
+            alpha = max(0.0, min(1.0, alpha))
             
             w[c_items0] *= alpha
             w[c_items1] *= 1 - alpha
@@ -188,19 +217,26 @@ def optimize_hrp(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
     3. Recursive Bisection: Allocate weights.
     """
     try:
-        from scipy.cluster.hierarchy import linkage
+        from scipy.cluster.hierarchy import linkage, dendrogram as scipy_dendrogram
         from scipy.spatial.distance import squareform
         
         # 1. Setup Data
         cov = returns.cov()
         corr = returns.corr()
         
-        # 2. Clustering
-        # Dist = sqrt(0.5 * (1 - rho))
+        # Sanitize: handle zero-variance assets (e.g. crypto with constant price
+        # from forward-fill beyond available data). These produce NaN correlations.
+        # Replace NaN with 0.0 (= max distance, uncorrelated) and clip to [-1, 1].
+        if corr.isna().any().any():
+            logger.info(f"HRP: Filling {corr.isna().sum().sum()} NaN correlations (zero-variance assets)")
+            corr = corr.fillna(0.0)
+            cov = cov.fillna(0.0)
+        corr = corr.clip(-1.0, 1.0)
+        
+        # 2. Clustering (computed ONCE, reused for both allocation and visualization)
         dist = np.sqrt(0.5 * (1 - corr))
         np.fill_diagonal(dist.values, 0)
         condensed = squareform(dist.values, checks=False)
-        
         link = linkage(condensed, method='ward')
         
         # 3. Quasi-Diagonalization (Sorting)
@@ -208,138 +244,41 @@ def optimize_hrp(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
         sort_ix = corr.index[sort_ix_indices].tolist()
         
         # 4. Recursive Bisection
-        # We pass the covariance matrix reordered? Or just access by labels.
-        # The function expects a list of labels (sort_ix).
         hrp_weights = get_rec_bipart(cov, sort_ix)
-        
-        # 5. HRP does not naturally support constraints - return raw weights
         clean_weights = hrp_weights.to_dict()
         
-        # 6. Dendrogram Data (for Visualization)
-        dendrogram_data = calculate_dendrogram(corr)
+        # 5. Dendrogram Data (reuse the SAME linkage — no double computation)
+        try:
+            ddata = scipy_dendrogram(link, no_plot=True, labels=corr.columns.tolist())
+            dendrogram_data = {
+                "icoord": ddata["icoord"],
+                "dcoord": ddata["dcoord"],
+                "ivl": ddata["ivl"],
+                "leaves": ddata["leaves"]
+            }
+        except Exception:
+            dendrogram_data = None
         
         return safe_clean_weights(clean_weights), dendrogram_data
         
     except Exception as e:
         logger.warning(f"HRP technical error: {e}")
-        # Fallback
         n = len(returns.columns)
         return {col: 1.0 / n for col in returns.columns}, None
 
 
-def calculate_dendrogram(corr_matrix: pd.DataFrame) -> Optional[Dict]:
-    """
-    Calculate dendrogram linkage for visualization.
-    Returns dictionary with 'icoord', 'dcoord', 'ivl' (labels), and 'leaves'.
-    """
-    try:
-        from scipy.cluster.hierarchy import linkage, dendrogram
-        from scipy.spatial.distance import squareform
-        
-        dist = np.sqrt(0.5 * (1 - corr_matrix))
-        np.fill_diagonal(dist.values, 0)
-        condensed = squareform(dist.values, checks=False)
-        
-        # Method 'ward' is generally best for visualization
-        Z = linkage(condensed, method='ward')
-        
-        # Calculate dendrogram coords without plotting
-        # no_plot=True returns the data dict
-        ddata = dendrogram(Z, no_plot=True, labels=corr_matrix.columns)
-        
-        return {
-            "icoord": ddata["icoord"],
-            "dcoord": ddata["dcoord"],
-            "ivl": ddata["ivl"],
-            "leaves": ddata["leaves"]
-        }
-    except Exception as e:
-        logger.warning(f"Dendrogram calculation failed: {e}")
-        return None
 
 
 # ============================================================================
-# Other Optimization Strategies
+# Optimizer Dispatch
 # ============================================================================
-
-def optimize_mvo(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: float = 1.0, frequency: int = TRADING_DAYS_PER_YEAR, **kwargs) -> Dict[str, float]:
-    """
-    Mean-Variance Optimization (MVO).
-    Maximizes the Sharpe Ratio (Tangency Portfolio).
-    Uses historical mean returns and shrunk covariance matrix.
-    """
-    try:
-        # 1. Expected Returns (Historical Mean) - Aggressive assumption that past mean is predictive
-        mu = expected_returns.mean_historical_return(returns, returns_data=True, frequency=frequency)
-        
-        # 2. Shrunk Covariance
-        S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
-        
-        # 3. Optimize for Max Sharpe
-        ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-        
-        try:
-            # Check if we have positive returns to support Max Sharpe
-            # If all returns are negative, Max Sharpe is undefined/infeasible for standard solvers
-            if mu.max() <= 0:
-                logger.info("MVO: All expected returns <= 0. Switching to Min Volatility.")
-                ef.min_volatility()
-            else:
-                # Maximize Sharpe (risk_free_rate=0.0)
-                ef.max_sharpe(risk_free_rate=0.0)
-                
-        except (ValueError, OptimizationError) as e:
-            # Common error: "at least one of the assets must have an expected return exceeding the risk-free rate"
-            # In this case, we fallback to Min Volatility (preserve MVO framework but ignore returns)
-            logger.warning(f"MVO Max Sharpe failed ({e}). Attempting Min Volatility fallback...")
-            
-            # Re-init EF to be clean (though usually safe to reuse, strict re-init is safer)
-            ef_retry = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-            ef_retry.min_volatility()
-            weights = ef_retry.clean_weights()
-            return safe_clean_weights(weights)
-
-        weights = ef.clean_weights()
-        return safe_clean_weights(weights)
-
-    except Exception as e:
-        logger.warning(f"MVO Optimization warning: {e}. Fallback to EW.")
-        n = len(returns.columns)
-        return {col: 1.0 / n for col in returns.columns}
-
-
-def optimize_gmv(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: float = 1.0, frequency: int = TRADING_DAYS_PER_YEAR, **kwargs) -> Dict[str, float]:
-    """
-    Global Minimum Variance (GMV).
-    Minimizes volatility without regarding expected returns.
-    """
-    try:
-        # We need covariance matrix. Mean returns are theoretically needed for EfficientFrontier init
-        # but GMV doesn't use them. We can pass dummy means or historical means.
-        mu = expected_returns.mean_historical_return(returns, returns_data=True, frequency=frequency)
-        S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
-        
-        ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-        ef.min_volatility()
-        weights = ef.clean_weights()
-        
-        return safe_clean_weights(weights)
-        
-    except Exception as e:
-        logger.warning(f"GMV Optimization warning: {e}. Fallback to EW.")
-        n = len(returns.columns)
-        return {col: 1.0 / n for col in returns.columns}
-
 
 def get_optimizer(method: str):
-    # Map 'hrp' and 'nco' (legacy) to HRP
-    if method == "hrp" or method == "nco":
-        return optimize_hrp 
+    """Return the optimizer function for the given method."""
     return {
         "hrp": optimize_hrp,
-        "nco": optimize_hrp,
-        "gmv": optimize_gmv,
-        "mvo": optimize_mvo
+        "gmv": None,  # GMV handled inline in optimize_with_fallback
+        "mvo": None,  # MVO handled inline in optimize_with_fallback
     }.get(method, optimize_hrp)
 
 
@@ -360,7 +299,7 @@ def optimize_with_fallback(
     equal_weights = {col: 1.0 / n for col in returns.columns}
     
     try:
-        if method == "hrp" or method == "nco":
+        if method == "hrp":
             # Call HRP - HRP does not use min/max weight constraints
             weights, dendrogram_data = optimize_hrp(
                 returns, 
@@ -379,33 +318,28 @@ def optimize_with_fallback(
 
         elif method == "mvo":
              # Use Exponential Moving Average (EMA) for expected returns
-             # Dynamic span based on training window size (e.g., 252 -> span=252)
-             # This ensures the decay is proportional to the user's chosen lookback.
              dynamic_span = len(returns)
              mu_raw = expected_returns.ema_historical_return(returns, returns_data=True, frequency=frequency, span=dynamic_span)
              
              # Apply James-Stein shrinkage to reduce estimation error
-             # This is a key technique used by professional quants
              mu = shrink_expected_returns(mu_raw)
              
              S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
              
-             # Cash Strategy: If the best asset return is less than Risk Free Rate, Go to Cash (0 weights)
-             # Note: risk_free_rate is annual, mu is annual
+             # Cash Strategy: If the best asset return < Risk Free Rate, go to Cash
              if mu.max() < risk_free_rate:
                  logger.info(f"MVO: Max expected return ({mu.max():.2%}) < Risk Free ({risk_free_rate:.2%}). Going to Cash.")
-                 # Return 0 weights -> Backtester puts everything in Cash
                  zero_weights = {col: 0.0 for col in returns.columns}
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
 
              ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
+             # L2 Regularization: penalize concentrated weights for better diversification
+             ef.add_objective(objective_functions.L2_reg, gamma=MVO_L2_GAMMA)
              try:
-                # Maximize Sharpe (risk_free_rate=0.0) - relative optimization
-                ef.max_sharpe(risk_free_rate=0.0)
+                ef.max_sharpe(risk_free_rate=risk_free_rate)
                 return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
                 
              except (ValueError, OptimizationError) as e:
-                 # If Solver fails, USER requests to go to CASH, not Min Vol.
                  logger.warning(f"MVO Max Sharpe solver failed ({e}). Defaulting to Cash.")
                  zero_weights = {col: 0.0 for col in returns.columns}
                  return OptimizationResult(
@@ -442,14 +376,14 @@ from .data_provider import memory
 @memory.cache
 def calculate_efficient_frontier(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: float = 1.0, frequency: int = TRADING_DAYS_PER_YEAR) -> Dict:
     """
-    Generate points for the Efficient Frontier curve.
+    Generate the Efficient Frontier curve (CLA) and Monte Carlo simulations (Cloud).
     """
     try:
         mu = expected_returns.mean_historical_return(returns, returns_data=True, frequency=frequency)
         S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
         vol = np.sqrt(np.diag(S))
-        n_assets = len(returns.columns)
 
+        # Individual asset positions
         assets = []
         for i, ticker in enumerate(returns.columns):
             assets.append({
@@ -458,45 +392,51 @@ def calculate_efficient_frontier(returns: pd.DataFrame, min_weight: float = 0.0,
                 "volatility": round(float(vol[i]), 4)
             })
 
-        rng = np.random.default_rng(seed=MONTE_CARLO_SEED)
+        # 1. Monte Carlo Simulations (The "Cloud")
+        num_simulations = 2000
+        simulations = []
+        n_assets = len(mu)
         
-        w = rng.random((MONTE_CARLO_SIMULATIONS, n_assets))
-        w = w / w.sum(axis=1)[:, np.newaxis]
+        # Vectorized simulation for speed
+        w = np.random.random((num_simulations, n_assets))
+        w = (w.T / w.sum(axis=1)).T  # Normalize weights to sum to 1
         
-        port_ret = w @ mu.values
-        port_var = np.sum((w @ S.values) * w, axis=1)
-        port_vol = np.sqrt(port_var)
+        # Calculate return and volatility for clean arrays
+        port_ret = np.dot(w, mu)
+        port_vol = np.sqrt(np.diag(np.dot(w, np.dot(S, w.T))))
         
-        sim_points = [
-            {"return": round(float(r), 4), "volatility": round(float(v), 4)}
-            for r, v in zip(port_ret, port_vol)
-        ]
+        for r, v in zip(port_ret, port_vol):
+             simulations.append({
+                "return": round(float(r), 4),
+                "volatility": round(float(v), 4)
+            })
 
-        from pypfopt import CLA
-        cla = CLA(mu, S, weight_bounds=(min_weight, max_weight))
-        
-        try:
-            cla.max_sharpe()
-            frontier_ret, frontier_vol, _ = cla.efficient_frontier(points=100)
-        except (ValueError, OptimizationError, np.linalg.LinAlgError):
-             frontier_ret, frontier_vol = [], []
-
+        # 2. Exact Efficient Frontier via CLA (The "Line")
         curve = []
-        for r, v in zip(frontier_ret, frontier_vol):
-             if v > 0: 
-                curve.append({
-                    "return": round(float(r), 4),
-                    "volatility": round(float(v), 4)
-                })
-        
-        curve.sort(key=lambda x: x["volatility"])
-        
+        try:
+            from pypfopt import CLA
+            cla = CLA(mu, S, weight_bounds=(min_weight, max_weight))
+            # Note: We don't call max_sharpe() here to avoid solver issues crashing the whole chart
+            # efficient_frontier() uses its own logic to trace the curve
+            frontier_ret, frontier_vol, _ = cla.efficient_frontier(points=100)
+            
+            for r, v in zip(frontier_ret, frontier_vol):
+                 if v > 0: 
+                    curve.append({
+                        "return": round(float(r), 4),
+                        "volatility": round(float(v), 4)
+                    })
+            curve.sort(key=lambda x: x["volatility"])
+            
+        except Exception as e:
+            logger.warning(f"CLA frontier generation failed: {e}. Returning simulations only.")
+
         return {
             "assets": assets,
             "curve": curve,
-            "simulations": sim_points
+            "simulations": simulations
         }
         
     except Exception as e:
-        logger.warning(f"Efficient Frontier calculation failed: {e}")
+        logger.warning(f"Efficient Frontier calculation failed completely: {e}")
         return {"assets": [], "curve": [], "simulations": []}

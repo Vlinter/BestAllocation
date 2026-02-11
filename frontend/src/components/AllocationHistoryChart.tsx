@@ -102,6 +102,7 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
                         tick={{ fill: '#888', fontSize: 11 }}
                         tickFormatter={(val) => showPercentage ? `${val}%` : val.toFixed(2)}
                         domain={showPercentage ? [0, 100] : [0, 1]}
+                        allowDataOverflow={true}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend />

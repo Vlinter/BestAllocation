@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import List, Dict, Literal, Optional, Any
+from datetime import datetime as dt
 
 # ============================================================================
 # Pydantic Models
@@ -9,10 +10,20 @@ class OptimizationRequest(BaseModel):
     tickers: List[str] = Field(..., description="List of ticker symbols", min_length=2)
     start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD) or None for earliest")
     end_date: Optional[str] = Field(default=None, description="End date (YYYY-MM-DD) or None for today")
-    method: Literal["nco", "gmv", "mvo"] = Field(default="nco")
+    method: Literal["hrp", "gmv", "mvo"] = Field(default="hrp")
     training_window: int = Field(default=252, ge=60, le=1260)
-    rebalancing_window: int = Field(default=21, ge=5, le=126)
+    rebalancing_window: int = Field(default=63, ge=5, le=126)
     transaction_cost_bps: float = Field(default=10, ge=0, le=100, description="Transaction cost in basis points")
+
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def validate_date_format(cls, v):
+        if v is not None:
+            try:
+                dt.strptime(v, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError(f"Invalid date format: '{v}'. Expected YYYY-MM-DD")
+        return v
 
 
 class PerformanceMetrics(BaseModel):
@@ -77,9 +88,7 @@ class OverfittingMetric(BaseModel):
 
 class ModelParams(BaseModel):
     """Model transparency: parameters used by each optimization method."""
-    # covariance_estimator: Optional[str] = None  # Removed for MDR simplified params
-    # confidence_level: Optional[str] = None     # Removed for GMV
-    linkage_method: Optional[str] = None         # For NCO (using KMeans)
+    linkage_method: Optional[str] = None  # For HRP
 
 
 class MethodResult(BaseModel):
@@ -100,7 +109,7 @@ class CompareRequest(BaseModel):
     start_date: Optional[str] = Field(default=None)
     end_date: Optional[str] = Field(default=None)
     training_window: int = Field(default=252, ge=60, le=1260)
-    rebalancing_window: int = Field(default=21, ge=5, le=126)
+    rebalancing_window: int = Field(default=63, ge=5, le=126)
     transaction_cost_bps: float = Field(default=10, ge=0, le=100)
     min_weight: float = Field(default=0.0, ge=0.0, le=0.5, description="Minimum weight per asset (0-50%)")
     max_weight: float = Field(default=1.0, ge=0.1, le=1.0, description="Maximum weight per asset (10-100%)")
@@ -113,6 +122,16 @@ class CompareRequest(BaseModel):
     # CVaR confidence level
     # cvar_confidence removed/ignored for GMV
     
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def validate_date_format(cls, v):
+        if v is not None:
+            try:
+                dt.strptime(v, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError(f"Invalid date format: '{v}'. Expected YYYY-MM-DD")
+        return v
+
     @model_validator(mode='after')
     def validate_weight_constraints(self):
         """Ensure weight constraints are feasible."""

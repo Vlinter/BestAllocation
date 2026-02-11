@@ -99,11 +99,14 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
 
     // Calculate frontier statistics
     const frontierStats = useMemo(() => {
-        if (!curveData.length) return null;
+        // Use curve data if available, otherwise fallback to simulations or strategies
+        const sourceData = curveData.length > 0 ? curveData : (simData.length > 0 ? simData : []);
 
-        const maxReturn = Math.max(...curveData.map(d => d.y));
-        const minVolatility = Math.min(...curveData.map(d => d.x));
-        const minVolPoint = curveData.find(d => d.x === minVolatility);
+        if (!sourceData.length && !strategyData.length) return null;
+
+        const maxReturn = sourceData.length > 0 ? Math.max(...sourceData.map(d => d.y)) : Math.max(...strategyData.map(d => d.y));
+        const minVolatility = sourceData.length > 0 ? Math.min(...sourceData.map(d => d.x)) : Math.min(...strategyData.map(d => d.x));
+        const minVolPoint = sourceData.find(d => d.x === minVolatility);
 
         // Best strategy by Sharpe
         const bestStrategy = strategyData.reduce((best, s) =>

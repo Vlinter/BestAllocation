@@ -60,6 +60,11 @@ STALE_PRICE_DAYS = 5  # Same price for 5+ days = suspicious
 # 0.5 is a balanced default - reduces estimation error while preserving signal
 RETURN_SHRINKAGE_INTENSITY = 0.5
 
+# MVO L2 Regularization (Ridge penalty on weight concentration)
+# Higher = more diversified but lower Sharpe, Lower = more concentrated
+# 0.1 is a balanced default that forces diversification without killing alpha
+MVO_L2_GAMMA = 0.1
+
 # Turnover Smoothing
 # 0.0 = no smoothing (full rebalance), 1.0 = no change (never rebalance)
 # 0.25 provides ~20% turnover reduction without lagging too much

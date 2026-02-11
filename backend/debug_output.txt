@@ -1,0 +1,38 @@
+﻿python : C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllo
+cation\backend\optimization.py:142: RuntimeWarning: divide by 
+zero encountered in divide
+Au caractère Ligne:1 : 1
++ python backend\test_hrp_debug.py 2>&1 | Out-File -Encoding 
+utf8 backe ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\clemm\.. 
+   .tered in divide:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  ivp = 1.0 / np.diag(cov)
+C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllocation\ba
+ckend\optimization.py:143: RuntimeWarning: invalid value 
+encountered in divide
+  ivp /= ivp.sum()
+C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllocation\ba
+ckend\optimization.py:142: RuntimeWarning: divide by zero 
+encountered in divide
+  ivp = 1.0 / np.diag(cov)
+C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllocation\ba
+ckend\optimization.py:143: RuntimeWarning: invalid value 
+encountered in divide
+  ivp /= ivp.sum()
+C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllocation\ba
+ckend\optimization.py:142: RuntimeWarning: divide by zero 
+encountered in divide
+  ivp = 1.0 / np.diag(cov)
+C:\Users\clemm\OneDrive\Documents\Antigravity\BestAllocation\ba
+ckend\optimization.py:143: RuntimeWarning: invalid value 
+encountered in divide
+  ivp /= ivp.sum()
+
+=== Results ===
+Total windows: 77
+HRP success: 77
+Equal-weight fallback: 0
+Success rate: 100.0%

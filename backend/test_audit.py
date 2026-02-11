@@ -8,7 +8,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from backend.metrics import calculate_metrics
-from backend.optimization import optimize_gmv, optimize_hrp, optimize_mvo
+from backend.optimization import optimize_hrp, optimize_with_fallback
 
 def test_metrics_math():
     """Test mathematical correctness of metrics."""
@@ -80,8 +80,8 @@ def test_gmv_optimization():
     
     df = pd.DataFrame({'A': ret_a, 'B': ret_b, 'C': ret_c}, index=dates)
     
-    # Optimize GMV
-    weights = optimize_gmv(df)
+    result = optimize_with_fallback(df, method="gmv", risk_free_rate=0.04)
+    weights = result.weights
     
     print(f"GMV Weights: {weights}")
     

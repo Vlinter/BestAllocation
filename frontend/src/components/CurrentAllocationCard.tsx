@@ -16,7 +16,7 @@ const COLORS = [
 ];
 
 const methodNames: Record<string, string> = {
-    nco: 'Nested Clustered Optimization',
+    hrp: 'Hierarchical Risk Parity',
     gmv: 'Global Minimum Variance',
     mdr: 'Max Diversification Ratio',
 };
@@ -128,7 +128,7 @@ const CurrentAllocationCard: React.FC<CurrentAllocationProps> = ({ allocation, t
                     Total Assets
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {tickers.length} ETFs/Stocks
+                    {tickers.length} Assets
                 </Typography>
             </Box>
         </Paper>

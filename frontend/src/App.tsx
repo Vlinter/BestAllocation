@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, Typography, Chip, Paper, Alert, AlertTitle, Tabs, Tab, IconButton, Tooltip } from '@mui/material';
-import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, HelpOutline as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
+import { EmojiEvents as TrophyIcon, Warning as WarningIcon, Dashboard, ShowChart, Shield, PieChart, Science, Menu as MenuIcon, HelpOutline as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon, Event as EventIcon } from '@mui/icons-material';
 import { darkTheme } from './theme';
 import {
   Sidebar,
@@ -28,6 +28,7 @@ const OverfittingChart = lazy(() => import('./components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('./components/OverfittingTable'));
 const DocumentationPage = lazy(() => import('./components/DocumentationPage'));
 const PerformanceHistogram = lazy(() => import('./components/PerformanceHistogram'));
+const RebalancerCard = lazy(() => import('./components/RebalancerCard'));
 
 
 // Optimized Tab Panel: Keeps all tabs mounted to avoid expensive re-renders
@@ -94,6 +95,7 @@ function App() {
   const [activeTab, setActiveTab] = useState(0);
   const [sidebarMode, setSidebarMode] = useState<'hidden' | 'normal' | 'fullscreen'>('normal');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [lastRebalancingWindow, setLastRebalancingWindow] = useState(63);
 
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -108,6 +110,7 @@ function App() {
   // Handle optimization request from Sidebar
   const handleOptimize = async (params: OptimizationParams) => {
     setActiveTab(0); // Reset to overview tab
+    setLastRebalancingWindow(params.rebalancingWindow);
     await runOptimization(params);
   };
 
@@ -581,6 +584,49 @@ function App() {
                         </Typography>
                       </Paper>
 
+                      {/* Next Rebalance Date Card */}
+                      {(() => {
+                        // Calculate next rebalance date from last allocation date + rebalancing window (calendar days)
+                        const lastMethod = results.methods[0];
+                        const allocHistory = lastMethod?.allocation_history;
+                        const lastAllocDate = allocHistory && allocHistory.length > 0
+                          ? new Date(allocHistory[allocHistory.length - 1].date as string)
+                          : new Date(results.data_end_date);
+                        // Convert trading days to approximate calendar days (trading days * 7/5)
+                        const calendarDays = Math.round(lastRebalancingWindow * 7 / 5);
+                        const nextRebalDate = new Date(lastAllocDate);
+                        nextRebalDate.setDate(nextRebalDate.getDate() + calendarDays);
+                        const today = new Date();
+                        const daysUntil = Math.ceil((nextRebalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        const isPast = daysUntil <= 0;
+                        const freqLabel = lastRebalancingWindow <= 5 ? 'Weekly'
+                          : lastRebalancingWindow <= 21 ? 'Monthly'
+                            : lastRebalancingWindow <= 63 ? 'Quarterly'
+                              : 'Semi-Annual';
+
+                        return (
+                          <Paper sx={{ p: 2.5, mb: 3, bgcolor: isPast ? 'rgba(239, 68, 68, 0.08)' : 'rgba(0, 212, 170, 0.08)', border: `1px solid ${isPast ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 212, 170, 0.2)'}`, borderRadius: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <EventIcon sx={{ fontSize: 36, color: isPast ? '#ef4444' : '#00D4AA' }} />
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                  Next Rebalance ({freqLabel})
+                                </Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: isPast ? '#ef4444' : '#00D4AA' }}>
+                                  {nextRebalDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                                  {isPast
+                                    ? `⚠️ Rebalance overdue by ${Math.abs(daysUntil)} day${Math.abs(daysUntil) > 1 ? 's' : ''} — update your weights now!`
+                                    : `📅 ${daysUntil} day${daysUntil > 1 ? 's' : ''} remaining`
+                                  }
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </Paper>
+                        );
+                      })()}
+
                       {/* Quick Metrics Table */}
                       <Box>
                         <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Summary Metrics</Typography>
@@ -638,7 +684,7 @@ function App() {
                         {results.correlation_matrix && (
                           <CorrelationHeatmap
                             data={results.correlation_matrix}
-                            dendrogramData={results.methods.find(m => m.method === 'hrp' || m.method === 'nco')?.current_allocation.dendrogram_data}
+                            dendrogramData={results.methods.find(m => m.method === 'hrp')?.current_allocation.dendrogram_data}
                           />
                         )}
                       </Box>
@@ -655,7 +701,7 @@ function App() {
                         date={results.data_end_date}
                       />
 
-                      {/* HRP Dendrogram removed as NCO doesn't use it */}
+                      {/* Dendrogram displayed within CorrelationHeatmap */}
 
                       <Typography variant="h5" sx={{ fontWeight: 700, mt: 2 }}>
                         Allocation Evolution
@@ -670,6 +716,12 @@ function App() {
                           />
                         ))}
                       </Box>
+
+                      {/* Rebalancer Tool — at the bottom for action */}
+                      <RebalancerCard
+                        methods={results.methods}
+                        tickers={results.tickers}
+                      />
                     </Box>
                   </Suspense>
                 </CustomTabPanel>

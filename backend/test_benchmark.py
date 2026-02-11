@@ -2,7 +2,7 @@ import requests
 import time
 import json
 
-URL = "http://localhost:8001/optimize"
+URL = "http://localhost:8000/optimize"
 
 payload = {
   "tickers": ["SPY", "TLT", "GLD"],

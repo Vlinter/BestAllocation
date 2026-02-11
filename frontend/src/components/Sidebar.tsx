@@ -55,12 +55,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     const [startDate, setStartDate] = useState('2010-01-01');
     const [endDate, setEndDate] = useState('');
     const [trainingWindow, setTrainingWindow] = useState(252);
-    const [rebalancingWindow, setRebalancingWindow] = useState(21);
+    const [rebalancingWindow, setRebalancingWindow] = useState(63);
     const [transactionCostBps, setTransactionCostBps] = useState(10);
     const [minWeight, setMinWeight] = useState(0);
     const [maxWeight, setMaxWeight] = useState(25); // Default: Diversified (1.5x equal weight for 6 tickers)
     // Benchmark settings
-    const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('equal_weight');
+    const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('custom');
     const [benchmarkTicker, setBenchmarkTicker] = useState('SPY');
     // Volatility Scaling (Quant Enhancement)
     const [enableVolatilityScaling, setEnableVolatilityScaling] = useState(false);

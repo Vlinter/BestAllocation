@@ -101,7 +101,7 @@ const MetricsTable: React.FC<MetricsTableProps> = ({
     method,
 }) => {
     const methodNames: Record<string, string> = {
-        nco: 'HRP',
+        hrp: 'HRP',
         gmv: 'GMV',
         mdr: 'MDR',
     };

@@ -1,9 +1,21 @@
 import numpy as np
 import pandas as pd
+import math
 from typing import List, Dict
 from scipy.stats import skew, kurtosis as kurt
 from .schemas import PerformanceMetrics
 from .config import TRADING_DAYS_PER_YEAR, MIN_POINTS_FOR_RELIABLE_SHARPE
+
+
+def safe_float(val, default=0.0) -> float:
+    """Convert to float, replacing NaN/Inf with default."""
+    try:
+        fv = float(val)
+        if math.isnan(fv) or math.isinf(fv):
+            return default
+        return fv
+    except (TypeError, ValueError):
+        return default
 
 # ============================================================================
 # Performance Metrics
@@ -122,26 +134,26 @@ def calculate_metrics(equity_curve: pd.Series, risk_free_rate: float,
             alpha = cagr - (risk_free_rate + beta * (bench_cagr - risk_free_rate))
     
     return PerformanceMetrics(
-        sharpe_ratio=round(float(sharpe_ratio), 4),
-        sortino_ratio=round(float(sortino_ratio), 4),
-        max_drawdown=round(float(max_drawdown), 4),
-        cagr=round(float(cagr), 4),
-        total_return=round(float(total_return), 4),
-        volatility=round(float(volatility), 4),
-        calmar_ratio=round(float(calmar_ratio), 4),
-        total_transaction_costs=round(total_costs, 4),
+        sharpe_ratio=round(safe_float(sharpe_ratio), 4),
+        sortino_ratio=round(safe_float(sortino_ratio), 4),
+        max_drawdown=round(safe_float(max_drawdown), 4),
+        cagr=round(safe_float(cagr), 4),
+        total_return=round(safe_float(total_return), 4),
+        volatility=round(safe_float(volatility), 4),
+        calmar_ratio=round(safe_float(calmar_ratio), 4),
+        total_transaction_costs=round(safe_float(total_costs), 4),
         num_rebalances=num_rebalances,
-        skewness=round(float(skewness), 4),
-        kurtosis=round(float(kurtosis_val), 4),
-        win_rate=round(float(win_rate), 4),
-        avg_win=round(float(avg_win), 6),
-        avg_loss=round(float(avg_loss), 6),
-        max_gain=round(float(max_gain), 4),
-        max_loss=round(float(max_loss), 4),
-        omega_ratio=round(float(omega_ratio), 4),
-        annualized_turnover=round(float(annualized_turnover), 4),
-        alpha=round(float(alpha), 4),
-        beta=round(float(beta), 4)
+        skewness=round(safe_float(skewness), 4),
+        kurtosis=round(safe_float(kurtosis_val), 4),
+        win_rate=round(safe_float(win_rate), 4),
+        avg_win=round(safe_float(avg_win), 6),
+        avg_loss=round(safe_float(avg_loss), 6),
+        max_gain=round(safe_float(max_gain), 4),
+        max_loss=round(safe_float(max_loss), 4),
+        omega_ratio=round(safe_float(omega_ratio), 4),
+        annualized_turnover=round(safe_float(annualized_turnover), 4),
+        alpha=round(safe_float(alpha), 4),
+        beta=round(safe_float(beta), 4)
     )
 
 def calculate_risk_contributions(weights: Dict[str, float], cov_matrix: pd.DataFrame) -> Dict[str, float]:

@@ -13,7 +13,21 @@ from datetime import datetime
 from typing import Optional, Union
 from pathlib import Path
 import pandas as pd
+import math
 import os
+
+
+def sanitize_nan(obj):
+    """Recursively replace NaN/Inf floats with None in a nested structure."""
+    if isinstance(obj, dict):
+        return {k: sanitize_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_nan(item) for item in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    return obj
 
 # Import modular components
 
@@ -429,12 +443,12 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         correlation_matrix = calculate_correlation_matrix(prices)
 
-        update_job(job_id, 90, "Running Monte Carlo Simulations (500 runs)...")
+        update_job(job_id, 90, "Calculating Efficient Frontier (CLA)...")
         from .optimization import calculate_efficient_frontier
         efficient_frontier_data = calculate_efficient_frontier(
             prices.pct_change().dropna(),
-            min_weight=request.min_weight,
-            max_weight=request.max_weight,
+            min_weight=0.0,  # Standardize chart to Long Only (0-1) to match MC cloud visuals
+            max_weight=1.0,
             frequency=trading_days_per_year
         )
 
@@ -456,7 +470,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             efficient_frontier_data=efficient_frontier_data
         )
         
-        jobs[job_id]["result"] = response.dict()
+        jobs[job_id]["result"] = sanitize_nan(response.dict())
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100
         jobs[job_id]["message"] = "Optimization Complete"
@@ -499,7 +513,7 @@ async def get_job_status(job_id: str):
     # Actually, let's keep result separate to keep polling light? 
     # No, for simplicity let's return everything, frontend can grab result when status=completed.
     
-    return job
+    return sanitize_nan(job)
 
 
 

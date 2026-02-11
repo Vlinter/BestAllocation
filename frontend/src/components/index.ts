@@ -26,6 +26,7 @@ export { default as MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
 export { default as ReturnsDistributionChart } from './ReturnsDistributionChart';
 export { default as ModelHealthCards } from './ModelHealthCards';
 export { default as PerformanceHistogram } from './PerformanceHistogram';
+export { default as RebalancerCard } from './RebalancerCard';
 
 export type { OptimizationParams } from './Sidebar';
 

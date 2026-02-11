@@ -361,7 +361,7 @@ def walk_forward_backtest(
         
         # Store Allocation (record the decision date, not execution date)
         alloc_entry = {"date": current_date.strftime("%Y-%m-%d")}
-        alloc_entry.update({t: round(target_weights.get(t, 0.0), 4) for t in tickers})
+        alloc_entry.update({t: round(float(target_weights.get(t, 0.0)), 4) for t in tickers})
         if fallback_flag:
             alloc_entry["_fallback"] = True
             
@@ -402,8 +402,8 @@ def walk_forward_backtest(
             day_val = day_val_shares + cash_balance
             
             equity_curve.append({
-                "date": d_date.timestamp() * 1000,
-                "value": round(day_val, 6)
+                "date": float(d_date.timestamp() * 1000),
+                "value": round(float(day_val), 6)
             })
             period_values.append(day_val)
         
@@ -424,8 +424,8 @@ def walk_forward_backtest(
         
         overfitting_metrics.append({
             "date": current_date.strftime("%Y-%m-%d"),
-            "predicted_sharpe": round(predicted_sharpe, 4),
-            "realized_sharpe": round(realized_sharpe, 4)
+            "predicted_sharpe": round(float(predicted_sharpe), 4),
+            "realized_sharpe": round(float(realized_sharpe), 4)
         })
 
         # Advance
@@ -447,9 +447,13 @@ def walk_forward_backtest(
     # Generate Equal Weight Benchmark (reusing the logic or function)
     benchmark_values, benchmark_turnover = get_equal_weight_benchmark(prices_clean, training_window, tickers, rebalancing_window)
 
+    # Cast all weight/contribution values to native Python float for JSON serialization
+    clean_weights = {k: float(v) for k, v in last_weights.items()} if last_weights else {}
+    clean_risk_contributions = {k: float(v) for k, v in final_risk_contributions.items()} if final_risk_contributions else {}
+
     return (equity_curve, benchmark_values, allocation_history, 
-            rebalance_dates, last_weights, total_transaction_costs, total_turnover, 
-            overfitting_metrics, final_risk_contributions, benchmark_turnover, latest_dendrogram_data)
+            rebalance_dates, clean_weights, total_transaction_costs, total_turnover, 
+            overfitting_metrics, clean_risk_contributions, benchmark_turnover, latest_dendrogram_data)
 
 
 def get_equal_weight_benchmark(
@@ -542,8 +546,8 @@ def get_equal_weight_benchmark(
             total_val_today += current_amounts[t]
             
         benchmark_values.append({
-            "date": d_date.timestamp() * 1000,
-            "value": round(total_val_today, 6)
+            "date": float(d_date.timestamp() * 1000),
+            "value": round(float(total_val_today), 6)
         })
         
         day_counter += 1
@@ -582,7 +586,7 @@ def get_custom_benchmark(
         ticker = benchmark_ticker.strip().upper()
         
         # 1. Try Tiingo
-        bench_prices = fetch_ticker_history(ticker, start_d, end_d)
+        bench_prices, _ = fetch_ticker_history(ticker, start_d, end_d)
         
         if bench_prices.empty:
             print(f"Could not fetch benchmark data for {ticker} from Tiingo.")
@@ -602,7 +606,7 @@ def get_custom_benchmark(
                 
                 for date, val in normalized.items():
                     benchmark_values.append({
-                        "date": date.timestamp() * 1000,
+                        "date": float(date.timestamp() * 1000),
                         "value": round(float(val), 6)
                     })
                     

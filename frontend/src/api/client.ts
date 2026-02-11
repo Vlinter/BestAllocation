@@ -71,8 +71,6 @@ export interface CurrentAllocation {
 
 // Model transparency parameters
 export interface ModelParams {
-  covariance_estimator?: string;
-  confidence_level?: string;
   linkage_method?: string;
 }
 
@@ -147,15 +145,7 @@ export const getJobStatus = async (jobId: string): Promise<JobStatus> => {
   return response.data;
 };
 
-// Deprecated: use startComparisonJob + polling instead for better UX
-export const comparePortfolio = async (
-  request: CompareRequest
-): Promise<CompareResponse> => {
-  const response = await apiClient.post<CompareResponse>('/compare', request);
-  return response.data;
-};
-
-export const healthCheck = async (): Promise<{ status: string; current_risk_free_rate: number }> => {
+export const healthCheck = async (): Promise<{ status: string; timestamp: string }> => {
   const response = await apiClient.get('/health');
   return response.data;
 };

@@ -70,10 +70,20 @@ export function useOptimization(): UseOptimizationReturn {
 
             // 2. Poll until complete
             const pollInterval = 500; // 0.5s
+            const maxRetries = 600; // 5 minutes max (600 × 500ms)
+            let retryCount = 0;
             let isPolling = true;
 
             const poll = async () => {
                 if (!isPolling) return;
+
+                if (retryCount >= maxRetries) {
+                    setError("Optimization timed out after 5 minutes. Please try again with fewer tickers or a shorter date range.");
+                    setIsLoading(false);
+                    isPolling = false;
+                    return;
+                }
+                retryCount++;
 
                 try {
                     const status = await getJobStatus(job_id);

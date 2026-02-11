@@ -4,19 +4,25 @@ from typing import List, Optional, Tuple, Dict
 from fastapi import HTTPException
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
 from joblib import Memory
 import time
+
+# Load .env file (if it exists) so API keys are available via os.environ
+load_dotenv()
 
 # ============================================================================
 # API Configuration
 # ============================================================================
 
-# Tiingo API - set via environment variable for security, with fallback
-TIINGO_API_KEY = os.environ.get("TIINGO_API_KEY", "54ca10d47b712bee420fba733caf5eca073742cd")
+# Tiingo API - MUST be set via environment variable (no hardcoded fallback for security)
+TIINGO_API_KEY = os.environ.get("TIINGO_API_KEY", "")
+if not TIINGO_API_KEY:
+    print("WARNING: TIINGO_API_KEY not set. Set it via environment variable or .env file.")
 TIINGO_BASE_URL = "https://api.tiingo.com"
 
 # FRED API - for Treasury rates (risk-free rate)
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "38f9d5b857b45bead3fc3de623332e1a")
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 
 # Rate limiting
@@ -34,6 +40,37 @@ CACHE_DIR = os.environ.get(
     os.path.join(os.path.dirname(__file__), "__cache__")
 )
 memory = Memory(CACHE_DIR, verbose=0)
+
+# ============================================================================
+# Crypto Detection
+# ============================================================================
+
+# Common crypto base currencies on Tiingo
+_CRYPTO_BASES = {
+    "btc", "eth", "ltc", "sol", "ada", "dot", "avax", "matic", "link",
+    "doge", "shib", "xrp", "bnb", "uni", "aave", "atom", "near", "apt",
+    "arb", "op", "fil", "xlm", "algo", "vet", "ftm", "sand", "mana",
+    "crv", "mkr", "comp", "snx", "sushi", "yfi", "bch", "etc", "trx",
+}
+
+# Quote currencies for crypto pairs
+_CRYPTO_QUOTES = {"usd", "eur", "btc", "eth", "usdt", "usdc"}
+
+
+def is_crypto_ticker(ticker: str) -> bool:
+    """
+    Detect if a ticker is a cryptocurrency pair for Tiingo.
+    Matches patterns like 'btcusd', 'ethusd', 'solusd', etc.
+    """
+    t = ticker.lower().strip()
+    # Check all combinations of known base + quote
+    for quote in _CRYPTO_QUOTES:
+        if t.endswith(quote):
+            base = t[:-len(quote)]
+            if base in _CRYPTO_BASES:
+                return True
+    return False
+
 
 # ============================================================================
 # Tiingo API Helper Functions
@@ -60,15 +97,80 @@ def tiingo_request(endpoint: str, params: dict = None) -> dict | list:
         raise HTTPException(status_code=500, detail=f"Data provider error: {str(e)}")
 
 
+def fetch_crypto_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[pd.Series, pd.Series]:
+    """
+    Fetch historical crypto prices from Tiingo's crypto endpoint.
+    Returns: (close series, open series) with datetime index.
+    
+    Tiingo crypto response format:
+    [{"ticker": "btcusd", "priceData": [{"date": ..., "close": ..., "open": ...}, ...]}]
+    """
+    endpoint = "/tiingo/crypto/prices"
+    params = {
+        "tickers": ticker.lower(),
+        "startDate": start_date,
+        "endDate": end_date,
+        "resampleFreq": "1day"
+    }
+    
+    empty_series = pd.Series(dtype=float)
+    
+    try:
+        data = tiingo_request(endpoint, params)
+        
+        if not data or not isinstance(data, list) or len(data) == 0:
+            print(f"No crypto data for {ticker}")
+            return empty_series, empty_series
+        
+        # Crypto response is nested: [{ticker, priceData: [...]}]
+        price_data = data[0].get("priceData", [])
+        if not price_data:
+            print(f"Empty priceData for crypto {ticker}")
+            return empty_series, empty_series
+        
+        df = pd.DataFrame(price_data)
+        
+        if df.empty or "date" not in df.columns:
+            print(f"Invalid crypto data format for {ticker}")
+            return empty_series, empty_series
+        
+        # Parse date and set as index
+        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+        df = df.set_index("date")
+        
+        # Rate limiting
+        time.sleep(RATE_LIMIT_DELAY)
+        
+        # Crypto uses 'close' and 'open' (no adj* fields — no splits/dividends)
+        if "close" not in df.columns:
+            print(f"No close price for crypto {ticker}")
+            return empty_series, empty_series
+        
+        close_series = df["close"]
+        open_series = df["open"] if "open" in df.columns else close_series
+        
+        print(f"  Crypto {ticker}: {len(close_series)} days fetched")
+        return close_series, open_series
+        
+    except Exception as e:
+        print(f"Error fetching crypto {ticker}: {e}")
+        return empty_series, empty_series
+
+
 def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[pd.Series, pd.Series]:
     """
     Fetch historical adjusted close AND open prices for a single ticker from Tiingo.
     Returns: (adjClose series, adjOpen series) with datetime index.
     
+    Automatically detects crypto tickers and routes to the correct endpoint.
     For realistic backtesting:
     - adjClose: Used for optimization and end-of-day valuation
     - adjOpen: Used for trade execution at T+1
     """
+    # Route crypto tickers to dedicated crypto endpoint
+    if is_crypto_ticker(ticker):
+        return fetch_crypto_ticker_history(ticker, start_date, end_date)
+    
     endpoint = f"/tiingo/daily/{ticker}/prices"
     params = {
         "startDate": start_date,
