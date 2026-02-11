@@ -94,12 +94,6 @@ const getModelParamsTooltip = (method: MethodResult): string => {
     const params = method.method_params;
     if (!params) return '';
 
-    if (params.covariance_estimator) {
-        return `Covariance: ${params.covariance_estimator}`;
-    }
-    if (params.confidence_level) {
-        return `Confidence: ${params.confidence_level}`;
-    }
     if (params.linkage_method) {
         return `Linkage: ${params.linkage_method}`;
     }
