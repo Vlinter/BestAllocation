@@ -3,7 +3,7 @@ import pandas as pd
 import math
 from typing import List, Dict
 from scipy.stats import skew, kurtosis as kurt
-from .schemas import PerformanceMetrics
+from backend.app.core.schemas import PerformanceMetrics
 from .config import TRADING_DAYS_PER_YEAR, MIN_POINTS_FOR_RELIABLE_SHARPE
 
 

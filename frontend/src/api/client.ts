@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use relative URL in production (same origin), localhost in development
-const API_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8000/api';
 
 export interface CompareRequest {
   tickers: string[];
