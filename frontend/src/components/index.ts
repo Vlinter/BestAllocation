@@ -22,6 +22,8 @@ export { default as AnimatedBackground } from './AnimatedBackground';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as SkeletonLoader } from './SkeletonLoader';
 
+export { default as WelcomeScreen } from './WelcomeScreen';
+
 export { default as MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
 export { default as ReturnsDistributionChart } from './ReturnsDistributionChart';
 export { default as ModelHealthCards } from './ModelHealthCards';

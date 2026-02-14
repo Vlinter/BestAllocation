@@ -1,11 +1,12 @@
 import React, { useState, lazy, Suspense, useEffect } from 'react';
-import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography, Chip } from '@mui/material';
-import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, Event as EventIcon, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography } from '@mui/material';
+import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
 import {
     DataInfoCard,
     ComparisonTable,
     SkeletonLoader,
     ErrorBoundary,
+    WelcomeScreen,
 } from '../components';
 
 // Lazy load charts
@@ -68,7 +69,7 @@ function CustomTabPanel(props: TabPanelProps) {
     );
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking, lastRebalancingWindow }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) => {
     const [activeTab, setActiveTab] = useState(0);
 
     const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -77,16 +78,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking, la
 
     if (!results) {
         // Empty State
-        return (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 4 }}>
-                <Typography variant="h4" sx={{ color: 'text.secondary' }}>
-                    Ready to Optimize
-                </Typography>
-                <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-                    Select tickers and parameters in the sidebar to start comparing strategies.
-                </Typography>
-            </Box>
-        );
+        return <WelcomeScreen />;
     }
 
     return (

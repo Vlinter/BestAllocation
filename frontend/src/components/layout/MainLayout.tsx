@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
 import { Menu as MenuIcon, Help as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
 import Sidebar from '../Sidebar'; // Adjust path if needed
