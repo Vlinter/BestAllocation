@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Paper, Chip } from '@mui/material';
-import { PieChart, Shield, TrendingUp, HelpOutline } from '@mui/icons-material';
+import { PieChart, Shield, TrendingUp } from '@mui/icons-material';
 
 const WelcomeScreen: React.FC = () => {
     return (
@@ -12,17 +12,7 @@ const WelcomeScreen: React.FC = () => {
             justifyContent: 'center',
             position: 'relative'
         }}>
-            {/* Header */}
-            <Box sx={{ position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.5px' }}>
-                    Strategy Comparison
-                </Typography>
-                <HelpOutline sx={{ color: 'text.secondary', fontSize: 20, cursor: 'pointer' }} />
-            </Box>
 
-            <Typography variant="body2" sx={{ position: 'absolute', top: 32, left: 0, color: 'text.secondary' }}>
-                Walk-Forward Analysis • HRP vs GMV vs MVO
-            </Typography>
 
             {/* Central Visual */}
             <Box sx={{ position: 'relative', width: 200, height: 200, mb: 6 }}>
