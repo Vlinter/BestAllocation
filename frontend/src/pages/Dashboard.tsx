@@ -1,6 +1,7 @@
 import React, { useState, lazy, Suspense, useEffect } from 'react';
 import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography } from '@mui/material';
 import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
+import type { CompareResponse, MethodResult } from '../api/client';
 import {
     DataInfoCard,
     ComparisonTable,
@@ -23,10 +24,24 @@ const OverfittingChart = lazy(() => import('../components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('../components/OverfittingTable'));
 const PerformanceHistogram = lazy(() => import('../components/PerformanceHistogram'));
 const RebalancerCard = lazy(() => import('../components/RebalancerCard'));
+const RollingSharpeChart = lazy(() => import('../components/RollingSharpeChart'));
+const StressTestCard = lazy(() => import('../components/StressTestCard'));
+const ExportButton = lazy(() => import('../components/ExportButton'));
+
+interface RankingEntry {
+    method: MethodResult;
+    wins: number;
+    winningMetrics: string[];
+}
+
+interface GlobalRanking {
+    ranking: RankingEntry[];
+    totalMetrics: number;
+}
 
 interface DashboardProps {
-    results: any;
-    globalRanking: any;
+    results: CompareResponse | null;
+    globalRanking: GlobalRanking | null;
     lastRebalancingWindow: number;
 }
 
@@ -104,13 +119,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                 <Tab icon={<Science fontSize="small" />} iconPosition="start" label="Analysis" />
             </Tabs>
 
-            {/* Warnings */}
-            {(results.warnings?.length > 0 || results.methods.some((m: any) => m.current_allocation.constraints_clipped || m.current_allocation.fallback_used)) && (
+            {/* Operational Warnings (constraints clipped, fallback used) */}
+            {results.methods.some((m: MethodResult) => m.current_allocation.constraints_clipped || m.current_allocation.fallback_used) && (
                 <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {results.warnings?.map((warning: string, idx: number) => (
-                        <Alert key={`warn-${idx}`} severity="warning" icon={<WarningIcon />}>{warning}</Alert>
-                    ))}
-                    {results.methods.filter((m: any) => m.current_allocation.constraints_clipped).map((m: any) => (
+                    {results.methods.filter((m: MethodResult) => m.current_allocation.constraints_clipped).map((m: MethodResult) => (
                         <Alert key={`clip-${m.method}`} severity="info" icon={<WarningIcon />}>
                             <AlertTitle>{m.method_name}: Weight Constraints Applied</AlertTitle>
                             HRP weights were clipped to meet your min / max constraints.
@@ -131,7 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                                     <Typography variant="h5" sx={{ fontWeight: 700 }}>🏆 Global Ranking</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                                    {globalRanking.ranking.map((r: any, idx: number) => (
+                                    {globalRanking.ranking.map((r: RankingEntry, idx: number) => (
                                         <Box key={r.method.method} sx={{ flex: '1 1 200px', p: 2, bgcolor: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
                                             <Typography variant="h6">#{idx + 1} {r.method.method_name}</Typography>
                                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>{r.wins}/{globalRanking.totalMetrics} metrics won</Typography>
@@ -143,6 +155,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
 
                         <ComparisonTable methods={results.methods} benchmarkMetrics={results.benchmark_metrics} benchmarkName={results.benchmark_name} />
                         <DataInfoCard tickerStartDates={results.ticker_start_dates} limitingTicker={results.limiting_ticker} dataStartDate={results.data_start_date} dataEndDate={results.data_end_date} />
+                        <Suspense fallback={null}>
+                            <ExportButton results={results} />
+                        </Suspense>
+
+                        {/* Disclaimers — subtle, at the bottom */}
+                        {results.warnings && results.warnings.length > 0 && (
+                            <Box sx={{ pt: 2, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                {results.warnings.map((warning: string, idx: number) => (
+                                    <Typography key={idx} variant="caption" sx={{ display: 'block', color: 'rgba(255,255,255,0.35)', lineHeight: 1.6 }}>
+                                        ⚠️ {warning}
+                                    </Typography>
+                                ))}
+                            </Box>
+                        )}
                     </Box>
                 </Suspense>
             </CustomTabPanel>
@@ -153,6 +179,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <ComparisonChart methods={results.methods} benchmarkCurve={results.benchmark_curve} benchmarkName={results.benchmark_name} />
                         <DrawdownComparisonChart methods={results.methods} />
+                        <RollingSharpeChart methods={results.methods} />
                         <PerformanceHistogram methods={results.methods} />
                         <ReturnsDistributionChart methods={results.methods} />
                     </Box>
@@ -166,7 +193,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {results.efficient_frontier_data && <EfficientFrontierChart data={results} />}
                             <RiskContributionChart methods={results.methods} />
-                            {results.correlation_matrix && <CorrelationHeatmap data={results.correlation_matrix} dendrogramData={results.methods.find((m: any) => m.method === 'hrp')?.current_allocation.dendrogram_data} />}
+                            {results.correlation_matrix && <CorrelationHeatmap data={results.correlation_matrix} dendrogramData={results.methods.find((m: MethodResult) => m.method === 'hrp')?.current_allocation.dendrogram_data} />}
                         </Box>
                     </Suspense>
                 </ErrorBoundary>
@@ -179,7 +206,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <AllocationComparison methods={results.methods} date={results.data_end_date} />
                         <Typography variant="h5" sx={{ fontWeight: 700, mt: 2 }}>Allocation Evolution</Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            {results.methods.map((m: any) => (
+                            {results.methods.map((m: MethodResult) => (
                                 <AllocationHistoryChart key={m.method} allocationHistory={m.allocation_history} tickers={results.tickers} methodName={m.method_name} />
                             ))}
                         </Box>
@@ -193,8 +220,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                 <Suspense fallback={<SkeletonLoader height={300} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <ModelHealthCards methods={results.methods} />
+                        <StressTestCard methods={results.methods} />
                         <OverfittingTable methods={results.methods} />
-                        <OverfittingChart datasets={results.methods.map((m: any) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'gmv' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
+                        <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'gmv' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
                     </Box>
                 </Suspense>
             </CustomTabPanel>

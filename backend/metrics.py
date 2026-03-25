@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
 import math
+import logging
 from typing import List, Dict
 from scipy.stats import skew, kurtosis as kurt
 from backend.app.core.schemas import PerformanceMetrics
 from .config import TRADING_DAYS_PER_YEAR, MIN_POINTS_FOR_RELIABLE_SHARPE
+
+logger = logging.getLogger(__name__)
 
 
 def safe_float(val, default=0.0) -> float:
@@ -191,7 +194,7 @@ def calculate_risk_contributions(weights: Dict[str, float], cov_matrix: pd.DataF
         return {tickers[i]: float(pct_rc[i]) for i in range(len(tickers))}
         
     except Exception as e:
-        print(f"Error calculating risk contributions: {e}")
+        logger.warning(f"Error calculating risk contributions: {e}")
         # Fallback to equal risk
         n = len(weights)
         return {t: 1.0/n for t in weights}
@@ -270,7 +273,7 @@ def calculate_correlation_matrix(prices: pd.DataFrame) -> dict:
         ordered_tickers = [tickers[i] for i in order]
         ordered_matrix = [[round(float(corr_values[i][j]), 3) for j in order] for i in order]
     except Exception as e:
-        print(f"Clustering failed: {e}, returning unordered matrix")
+        logger.warning(f"Clustering failed: {e}, returning unordered matrix")
         ordered_tickers = tickers
         ordered_matrix = [[round(float(corr_values[i][j]), 3) for j in range(n)] for i in range(n)]
     

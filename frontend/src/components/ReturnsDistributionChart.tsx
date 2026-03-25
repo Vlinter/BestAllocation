@@ -99,54 +99,60 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
         const positiveMonths = returns.filter(r => r >= 0).length;
         const winRate = positiveMonths / n;
 
-        // Create Histogram Bins
+        // Create Histogram Bins — Freedman-Diaconis rule for optimal width
         const minRet = Math.min(...returns);
         const maxRet = Math.max(...returns);
-        const binCount = Math.min(25, Math.max(12, Math.ceil(Math.sqrt(n))));
         const range = maxRet - minRet;
+        
+        // Freedman-Diaconis: binWidth = 2 × IQR × n^(-1/3)
+        const q1Idx = Math.floor(n * 0.25);
+        const q3Idx = Math.floor(n * 0.75);
+        const iqr = sortedReturns[q3Idx] - sortedReturns[q1Idx];
+        const fdBinWidth = iqr > 0 ? 2 * iqr * Math.pow(n, -1/3) : range / 10;
+        const binCount = Math.max(8, Math.min(20, Math.ceil(range / fdBinWidth)));
         const calculatedBinSize = range / binCount;
+        const scaleFactor = n * calculatedBinSize;
 
-        const combinedData: any[] = [];
+        // Helper: gaussian PDF scaled to histogram
+        const gaussAt = (x: number) => {
+            const pdf = (1 / (stdDev * Math.sqrt(2 * Math.PI))) *
+                Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2));
+            return pdf * scaleFactor;
+        };
 
-        // Add Bins
+        const chartData: any[] = [];
+
+        // Left tail edge points (for smooth curve start)
+        for (let i = 3; i >= 1; i--) {
+            const x = minRet - i * calculatedBinSize * 0.7;
+            chartData.push({ x, frequency: gaussAt(x), type: 'edge' });
+        }
+
+        // Bin data with gaussian value at each bin center
         for (let i = 0; i < binCount; i++) {
             const binStart = minRet + i * calculatedBinSize;
             const binEnd = minRet + (i + 1) * calculatedBinSize;
             const mid = minRet + (i + 0.5) * calculatedBinSize;
             const count = returns.filter(r => r >= binStart && r < binEnd).length;
 
-            if (count > 0 || i === 0 || i === binCount - 1) {
-                combinedData.push({
-                    x: mid,
-                    count: count,
-                    binStart,
-                    binEnd,
-                    type: 'bin'
-                });
-            }
-        }
-
-        // Add High-Res Curve Points with smooth area
-        const curveSteps = 150;
-        const curveStart = minRet - calculatedBinSize;
-        const curveEnd = maxRet + calculatedBinSize;
-        const step = (curveEnd - curveStart) / curveSteps;
-        const scaleFactor = n * calculatedBinSize;
-
-        for (let i = 0; i <= curveSteps; i++) {
-            const x = curveStart + i * step;
-            const pdf = (1 / (stdDev * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2));
-            combinedData.push({
-                x: x,
-                frequency: pdf * scaleFactor,
-                type: 'curve'
+            chartData.push({
+                x: mid,
+                count: count > 0 ? count : undefined,
+                frequency: gaussAt(mid),
+                binStart,
+                binEnd,
+                type: 'bin'
             });
         }
 
-        combinedData.sort((a, b) => a.x - b.x);
+        // Right tail edge points (for smooth curve end)
+        for (let i = 1; i <= 3; i++) {
+            const x = maxRet + i * calculatedBinSize * 0.7;
+            chartData.push({ x, frequency: gaussAt(x), type: 'edge' });
+        }
 
         return {
-            chartData: combinedData,
+            chartData,
             stats: {
                 mean,
                 stdDev,
@@ -417,9 +423,9 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
 
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
 
-                        {/* Smooth area under curve - RENDER FIRST (background) */}
+                        {/* Smooth Gaussian curve - RENDER FIRST (background) */}
                         <Area
-                            type="natural"
+                            type="monotone"
                             dataKey="frequency"
                             stroke={methodColor.main}
                             strokeWidth={2.5}
@@ -428,16 +434,17 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                             connectNulls
                             name="Gaussian Fit"
                             animationDuration={1200}
+                            dot={false}
                         />
 
                         {/* Histogram bars - RENDER SECOND (foreground) */}
                         <Bar
                             dataKey="count"
-                            barSize={35}
+                            maxBarSize={60}
                             radius={[4, 4, 0, 0]}
                         >
                             {chartData.map((entry: any, index: number) => {
-                                if (entry.type === 'bin') {
+                                if (entry.type === 'bin' && entry.count !== undefined) {
                                     const fill = entry.x >= 0 ? 'url(#barGradientPositive)' : 'url(#barGradientNegative)';
                                     return (
                                         <Cell

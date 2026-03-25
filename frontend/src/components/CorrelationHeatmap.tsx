@@ -33,9 +33,6 @@ const CorrelationHeatmap: React.FC<CorrelationHeatmapProps> = ({ data, dendrogra
     const { tickers, matrix } = data;
     const n = tickers.length;
 
-    // Debug
-    console.log('CorrelationHeatmap dendrogramData:', dendrogramData);
-
     if (n === 0 || matrix.length === 0) {
         return (
             <Paper sx={{ p: 3 }}>
@@ -62,7 +59,7 @@ const CorrelationHeatmap: React.FC<CorrelationHeatmapProps> = ({ data, dendrogra
                 </Tooltip>
             </Box>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                Assets ordered by similarity (hierarchical clustering). Low correlation = better diversification.
+                Calculated over the full backtest period (in-sample). Assets ordered by similarity (hierarchical clustering). Low correlation = better diversification.
             </Typography>
 
             <Box sx={{ overflowX: 'auto', pb: 2 }}>

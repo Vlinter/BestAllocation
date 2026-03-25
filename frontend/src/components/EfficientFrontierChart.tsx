@@ -25,6 +25,7 @@ const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
     nco: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.6)' },
     gmv: { color: '#FFE66D', glow: 'rgba(255, 230, 109, 0.6)' },
     mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.6)' },
+    risk_parity: { color: '#F472B6', glow: 'rgba(244, 114, 182, 0.6)' },
 };
 
 const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo(({ data }) => {
@@ -310,7 +311,7 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
                             Efficient Frontier
                         </Typography>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)' }}>
-                            Monte Carlo • {simData.length.toLocaleString()} simulations • Capital Market Line
+                            In-Sample · Full Period • Monte Carlo • {simData.length.toLocaleString()} simulations • Capital Market Line
                         </Typography>
                     </Box>
                 </Box>

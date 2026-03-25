@@ -94,7 +94,7 @@ def _run_strategy(
 ) -> Optional[MethodResult]:
     try:
         (equity_curve, bench_curve, allocation_history, rebalance_dates, 
-         current_weights, total_costs, total_turnover, overfitting_metrics,
+         current_weights, total_costs, annualized_turnover_pct, overfitting_metrics,
          risk_contributions, bench_turnover_val, dendrogram_data_comp) = walk_forward_backtest(
             prices=prices,
             open_prices=open_prices,
@@ -121,9 +121,6 @@ def _run_strategy(
             index=pd.to_datetime([e["date"] for e in equity_curve], unit="ms")
         )
         
-        years = len(equity_curve) / trading_days_per_year
-        annualized_turnover = total_turnover / max(years, 0.01)
-        
         # Benchmark for metrics
         benchmark_series = pd.Series(
              [b["value"] for b in bench_curve],
@@ -135,7 +132,7 @@ def _run_strategy(
         
         performance_metrics = calculate_metrics(
             equity_series, rf_scalar, total_costs, 
-            len(rebalance_dates), annualized_turnover,
+            len(rebalance_dates), annualized_turnover_pct,
             benchmark_returns=benchmark_returns,
             annualization_factor=trading_days_per_year
         )
@@ -162,7 +159,7 @@ def _run_strategy(
             method_params=method_params
         )
     except Exception as e:
-        print(f"Error in method {method}: {e}")
+        logger.error(f"Error in method {method}: {e}")
         return None
 
 def run_comparison_job(job_id: str, request: CompareRequest):
@@ -229,7 +226,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                     if result:
                         method_results.append(result)
                 except Exception as exc:
-                    print(f"Strategy {method} generated an exception: {exc}")
+                    logger.error(f"Strategy {method} generated an exception: {exc}")
                 
                 completed_methods += 1
                 current_progress = 15 + (completed_methods * progress_per_method)
@@ -268,6 +265,19 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         job_manager.update_job(job_id, 85, "Calculating Correlation Matrix...")
         
         method_results.sort(key=lambda x: x.performance_metrics.sortino_ratio, reverse=True)
+        
+        # Collect bias/caveat warnings
+        data_warnings = []
+        data_warnings.append(
+            "Survivorship Bias: Tickers selected today may not represent the full investment universe "
+            "available historically. Delisted or failed assets are excluded — past performance is overstated."
+        )
+        if request.min_weight > 0 or request.max_weight < 1:
+            data_warnings.append(
+                "HRP ignores min/max weight constraints by design (López de Prado, 2016). "
+                "The recursive bisection naturally produces diversified weights. "
+                "Constraints only apply to GMV and MVO."
+            )
         correlation_matrix = calculate_correlation_matrix(prices)
 
         job_manager.update_job(job_id, 90, "Calculating Efficient Frontier (CLA)...")
@@ -292,7 +302,8 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             ticker_start_dates=ticker_start_dates,
             limiting_ticker=limiting_ticker,
             correlation_matrix=correlation_matrix,
-            efficient_frontier_data=efficient_frontier_data
+            efficient_frontier_data=efficient_frontier_data,
+            warnings=data_warnings
         )
         
         job_manager.update_job(job_id, 100, "Optimization Complete", status="completed", result=sanitize_nan(response.dict()))

@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import Tuple, List, Dict, Optional, Union
 import numpy as np
+import logging
 from fastapi import HTTPException
 
 
@@ -11,6 +12,8 @@ from .config import (
 )
 # Import the new helper
 from .metrics import infer_trading_frequency
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -90,8 +93,8 @@ def apply_volatility_scaling(
     w_vec = np.array([weights.get(col, 0.0) for col in recent_returns.columns])
     port_returns = recent_returns.values @ w_vec
     
-    # Annualized volatility
-    realized_vol = np.std(port_returns) * np.sqrt(trading_days)
+    # Annualized volatility (ddof=1 for sample std)
+    realized_vol = np.std(port_returns, ddof=1) * np.sqrt(trading_days)
     
     if realized_vol < 1e-6:
         return weights, 0.0
@@ -104,7 +107,7 @@ def apply_volatility_scaling(
     cash_allocation = 1.0 - sum(scaled_weights.values())
     
     if scale < 1.0:
-        print(f"Vol Scaling: Realized vol {realized_vol:.1%} > Target {target_vol:.1%}. Scale={scale:.2f}, Cash={cash_allocation:.1%}")
+        logger.info(f"Vol Scaling: Realized vol {realized_vol:.1%} > Target {target_vol:.1%}. Scale={scale:.2f}, Cash={cash_allocation:.1%}")
     
     return scaled_weights, max(0.0, cash_allocation)
 
@@ -113,35 +116,39 @@ def apply_volatility_scaling(
 # Walk-Forward Analysis Engine (Share-Based / Realistic)
 # ============================================================================
 
-def calculate_portfolio_sharpe_weights(returns: pd.DataFrame, weights: Dict[str, float], annualization_factor: int = TRADING_DAYS_PER_YEAR) -> float:
+def calculate_portfolio_sharpe_weights(returns: pd.DataFrame, weights: Dict[str, float], risk_free_rate: float = 0.0, annualization_factor: int = TRADING_DAYS_PER_YEAR) -> float:
     """
     Calculate annualized Sharpe ratio for a CONSTANT WEIGHT portfolio (rebalanced daily).
     Used primarily for the 'Predicted' (In-Sample) metric.
+    Now correctly subtracts the risk-free rate.
     """
     if returns.empty:
         return 0.0
-    
-    # Vectorized calculation
-    # returns: T x N, weights: N
-    # port_ret: T
     
     # Align weights to columns
     w_vec = np.array([weights.get(col, 0.0) for col in returns.columns])
     
     port_returns = returns.values @ w_vec
     
-    mean = np.mean(port_returns)
-    std = np.std(port_returns)
+    # Subtract daily risk-free rate for excess returns
+    daily_rf = risk_free_rate / annualization_factor if annualization_factor > 0 else 0.0
+    excess_returns = port_returns - daily_rf
     
-    if std > 1e-6:
-        sharpe = (mean / std) * np.sqrt(annualization_factor)
-        return max(min(sharpe, 20.0), -20.0)
+    mean_excess = np.mean(excess_returns)
+    std_excess = np.std(excess_returns, ddof=1)
+    
+    if std_excess > 1e-6:
+        sharpe = (mean_excess / std_excess) * np.sqrt(annualization_factor)
+        # Cap at ±5: no real-world portfolio has annualized Sharpe beyond this range
+        # Values outside indicate near-zero vol or numerical instability (e.g. MVO near-cash)
+        return max(min(sharpe, 5.0), -5.0)
     return 0.0
 
 
-def calculate_realized_sharpe_shares(portfolio_values: List[float], annualization_factor: int = TRADING_DAYS_PER_YEAR) -> float:
+def calculate_realized_sharpe_shares(portfolio_values: List[float], risk_free_rate: float = 0.0, annualization_factor: int = TRADING_DAYS_PER_YEAR) -> float:
     """
     Calculate realized Sharpe from the actual equity curve section.
+    Now correctly subtracts the risk-free rate.
     """
     if len(portfolio_values) < 2:
         return 0.0
@@ -149,14 +156,18 @@ def calculate_realized_sharpe_shares(portfolio_values: List[float], annualizatio
     series = pd.Series(portfolio_values)
     rets = series.pct_change().dropna()
     
-    mean = rets.mean()
-    std = rets.std()
+    # Subtract daily risk-free rate
+    daily_rf = risk_free_rate / annualization_factor if annualization_factor > 0 else 0.0
+    excess_rets = rets - daily_rf
+    
+    mean_excess = excess_rets.mean()
+    std_excess = excess_rets.std()  # pd.Series.std() uses ddof=1 by default
     
     # Increase threshold to avoid noise-induced infinity during Cash periods
-    if std > 1e-6:
-        sharpe = (mean / std) * np.sqrt(annualization_factor)
-        # Cap Sharpe at 20 to prevent chart scaling issues (Cash artifacts)
-        return max(min(sharpe, 20.0), -20.0)
+    if std_excess > 1e-6:
+        sharpe = (mean_excess / std_excess) * np.sqrt(annualization_factor)
+        # Cap at ±5: same as predicted Sharpe — eliminates MVO cash-mode artifacts
+        return max(min(sharpe, 5.0), -5.0)
     return 0.0
 
 
@@ -204,7 +215,7 @@ def walk_forward_backtest(
     # Use the full index for best detection
     trading_days_per_year = infer_trading_frequency(prices_clean.index)
     if trading_days_per_year == 365:
-        print("Detected Crypto/24-7 market data. Using 365 days for annualization.")
+        logger.info("Detected Crypto/24-7 market data. Using 365 days for annualization.")
     
     returns = prices_clean.pct_change().iloc[1:] # Drop first NaN
     
@@ -221,7 +232,7 @@ def walk_forward_backtest(
     cash_balance = 0.0
     
     total_transaction_costs = 0.0
-    total_turnover = 0.0
+    total_turnover_pct = 0.0  # Track turnover as percentage of AUM (not dollars)
     transaction_cost_pct = transaction_cost_bps / 10000.0
     
     # Indices
@@ -247,7 +258,8 @@ def walk_forward_backtest(
         
         # training_returns: [current_idx - train_win : current_idx]
         # (This is strict "point-in-time", using only past data)
-        train_returns = returns.loc[:current_date].iloc[-training_window-1:-1]
+        # Use all returns up to and including current_date (point-in-time, no look-ahead)
+        train_returns = returns.loc[:current_date].iloc[-training_window:]
         if train_returns.empty:
              # Should not happen given check above
              current_idx += rebalancing_window
@@ -279,7 +291,7 @@ def walk_forward_backtest(
             if opt_result.dendrogram_data:
                 latest_dendrogram_data = opt_result.dendrogram_data
         except Exception as e:
-            print(f"Optimization failed at {current_date}: {e}, using EW")
+            logger.warning(f"Optimization failed at {current_date}: {e}, using EW")
             target_weights = {t: 1.0/len(tickers) for t in tickers}
             fallback_flag = True
 
@@ -336,7 +348,10 @@ def walk_forward_backtest(
         # Transaction Cost (applied to value)
         cost = turnover_value * transaction_cost_pct
         total_transaction_costs += cost
-        total_turnover += turnover_value
+        
+        # Track turnover as percentage of AUM (one-sided: divide by 2)
+        if value_before_trade > 1e-9:
+            total_turnover_pct += (turnover_value / value_before_trade) / 2.0
         
         # Net Investment Value (Value - Cost)
         net_value = value_before_trade - cost
@@ -413,14 +428,22 @@ def walk_forward_backtest(
         # Check if we are in Cash mode (sum of weights close to 0)
         is_cash_mode = sum(target_weights.values()) < 0.001
         
+        # Determine the annual RF rate for this period
+        if isinstance(risk_free_rate, pd.Series):
+            period_rf_annual = float(risk_free_rate.asof(current_date))
+            if pd.isna(period_rf_annual):
+                period_rf_annual = 0.04
+        else:
+            period_rf_annual = float(risk_free_rate)
+        
         if is_cash_mode:
             # In Cash mode, Predicted Sharpe is 0 (Risk free excess return = 0)
             # Realized Sharpe is technically infinite/undefined due to 0 vol, but we map it to 0
             predicted_sharpe = 0.0
             realized_sharpe = 0.0
         else:
-            predicted_sharpe = calculate_portfolio_sharpe_weights(train_returns, target_weights, annualization_factor=trading_days_per_year)
-            realized_sharpe = calculate_realized_sharpe_shares(period_values, annualization_factor=trading_days_per_year)
+            predicted_sharpe = calculate_portfolio_sharpe_weights(train_returns, target_weights, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
+            realized_sharpe = calculate_realized_sharpe_shares(period_values, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
         
         overfitting_metrics.append({
             "date": current_date.strftime("%Y-%m-%d"),
@@ -437,11 +460,14 @@ def walk_forward_backtest(
             pct_complete = (current_idx - training_window) / (len(dates) - training_window)
             progress_callback(max(0.0, min(1.0, pct_complete)))
 
-    # Final Risk Contributions
+    # Final Risk Contributions — use Ledoit-Wolf shrunk covariance for consistency
     from .metrics import calculate_risk_contributions
+    from pypfopt import risk_models
     training_window_returns = returns.iloc[-training_window:]
     if not training_window_returns.empty:
-        cov_matrix = training_window_returns.cov()
+        cov_matrix = risk_models.CovarianceShrinkage(
+            training_window_returns, returns_data=True, frequency=trading_days_per_year
+        ).ledoit_wolf()
         final_risk_contributions = calculate_risk_contributions(last_weights, cov_matrix)
 
     # Generate Equal Weight Benchmark (reusing the logic or function)
@@ -451,8 +477,12 @@ def walk_forward_backtest(
     clean_weights = {k: float(v) for k, v in last_weights.items()} if last_weights else {}
     clean_risk_contributions = {k: float(v) for k, v in final_risk_contributions.items()} if final_risk_contributions else {}
 
+    # Annualize percentage turnover
+    years = (len(dates) - training_window) / trading_days_per_year
+    annualized_turnover_pct = total_turnover_pct / max(years, 0.01)
+
     return (equity_curve, benchmark_values, allocation_history, 
-            rebalance_dates, clean_weights, total_transaction_costs, total_turnover, 
+            rebalance_dates, clean_weights, total_transaction_costs, annualized_turnover_pct, 
             overfitting_metrics, clean_risk_contributions, benchmark_turnover, latest_dendrogram_data)
 
 
@@ -589,7 +619,7 @@ def get_custom_benchmark(
         bench_prices, _ = fetch_ticker_history(ticker, start_d, end_d)
         
         if bench_prices.empty:
-            print(f"Could not fetch benchmark data for {ticker} from Tiingo.")
+            logger.info(f"Could not fetch benchmark data for {ticker} from Tiingo.")
             return [], benchmark_ticker
             
         # Clean
@@ -613,7 +643,7 @@ def get_custom_benchmark(
         return benchmark_values, ticker
         
     except Exception as e:
-        print(f"Error fetching custom benchmark {benchmark_ticker}: {e}")
+        logger.error(f"Error fetching custom benchmark {benchmark_ticker}: {e}")
         return [], benchmark_ticker
 
 

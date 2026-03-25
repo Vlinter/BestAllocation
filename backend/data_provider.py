@@ -4,9 +4,12 @@ from typing import List, Optional, Tuple, Dict
 from fastapi import HTTPException
 from datetime import datetime, timedelta
 import os
+import logging
 from dotenv import load_dotenv
 from joblib import Memory
 import time
+
+logger = logging.getLogger(__name__)
 
 # Load .env file (if it exists) so API keys are available via os.environ
 load_dotenv()
@@ -18,7 +21,7 @@ load_dotenv()
 # Tiingo API - MUST be set via environment variable (no hardcoded fallback for security)
 TIINGO_API_KEY = os.environ.get("TIINGO_API_KEY", "")
 if not TIINGO_API_KEY:
-    print("WARNING: TIINGO_API_KEY not set. Set it via environment variable or .env file.")
+    logger.warning("TIINGO_API_KEY not set. Set it via environment variable or .env file.")
 TIINGO_BASE_URL = "https://api.tiingo.com"
 
 # FRED API - for Treasury rates (risk-free rate)
@@ -93,7 +96,7 @@ def tiingo_request(endpoint: str, params: dict = None) -> dict | list:
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Tiingo API error: {e}")
+        logger.error(f"Tiingo API error: {e}")
         raise HTTPException(status_code=500, detail=f"Data provider error: {str(e)}")
 
 
@@ -119,19 +122,19 @@ def fetch_crypto_ticker_history(ticker: str, start_date: str, end_date: str) -> 
         data = tiingo_request(endpoint, params)
         
         if not data or not isinstance(data, list) or len(data) == 0:
-            print(f"No crypto data for {ticker}")
+            logger.info(f"No crypto data for {ticker}")
             return empty_series, empty_series
         
         # Crypto response is nested: [{ticker, priceData: [...]}]
         price_data = data[0].get("priceData", [])
         if not price_data:
-            print(f"Empty priceData for crypto {ticker}")
+            logger.info(f"Empty priceData for crypto {ticker}")
             return empty_series, empty_series
         
         df = pd.DataFrame(price_data)
         
         if df.empty or "date" not in df.columns:
-            print(f"Invalid crypto data format for {ticker}")
+            logger.warning(f"Invalid crypto data format for {ticker}")
             return empty_series, empty_series
         
         # Parse date and set as index
@@ -143,17 +146,17 @@ def fetch_crypto_ticker_history(ticker: str, start_date: str, end_date: str) -> 
         
         # Crypto uses 'close' and 'open' (no adj* fields — no splits/dividends)
         if "close" not in df.columns:
-            print(f"No close price for crypto {ticker}")
+            logger.info(f"No close price for crypto {ticker}")
             return empty_series, empty_series
         
         close_series = df["close"]
         open_series = df["open"] if "open" in df.columns else close_series
         
-        print(f"  Crypto {ticker}: {len(close_series)} days fetched")
+        logger.debug(f"  Crypto {ticker}: {len(close_series)} days fetched")
         return close_series, open_series
         
     except Exception as e:
-        print(f"Error fetching crypto {ticker}: {e}")
+        logger.error(f"Error fetching crypto {ticker}: {e}")
         return empty_series, empty_series
 
 
@@ -184,14 +187,14 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[p
         data = tiingo_request(endpoint, params)
         
         if not data or not isinstance(data, list):
-            print(f"No data for {ticker}")
+            logger.info(f"No data for {ticker}")
             return empty_series, empty_series
         
         # Create DataFrame from results
         df = pd.DataFrame(data)
         
         if df.empty or "date" not in df.columns:
-            print(f"Invalid data format for {ticker}")
+            logger.warning(f"Invalid data format for {ticker}")
             return empty_series, empty_series
         
         # Parse date and set as index
@@ -207,7 +210,7 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[p
         elif "close" in df.columns:
             adj_close = df["close"]
         else:
-            print(f"No close price column for {ticker}")
+            logger.info(f"No close price column for {ticker}")
             return empty_series, empty_series
         
         # Extract adjusted open (for T+1 execution)
@@ -217,13 +220,13 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[p
             adj_open = df["open"]
         else:
             # Fallback: use adjClose for open (slight approximation, log warning)
-            print(f"Warning: No open price for {ticker}, using adjClose as fallback")
+            logger.warning(f"No open price for {ticker}, using adjClose as fallback")
             adj_open = adj_close
         
         return adj_close, adj_open
         
     except Exception as e:
-        print(f"Error fetching {ticker}: {e}")
+        logger.error(f"Error fetching {ticker}: {e}")
         return empty_series, empty_series
 
 
@@ -253,7 +256,7 @@ def fetch_fred_series(series_id: str, start_date: Optional[str] = None, end_date
         data = response.json()
         
         if "observations" not in data:
-            print(f"No observations for FRED series {series_id}")
+            logger.info(f"No observations for FRED series {series_id}")
             return pd.Series(dtype=float)
         
         observations = data["observations"]
@@ -270,35 +273,42 @@ def fetch_fred_series(series_id: str, start_date: Optional[str] = None, end_date
         return series
         
     except Exception as e:
-        print(f"Error fetching FRED series {series_id}: {e}")
+        logger.error(f"Error fetching FRED series {series_id}: {e}")
         return pd.Series(dtype=float)
 
 
 @memory.cache
-def get_risk_free_rate() -> float:
+def _get_risk_free_rate_cached(cache_date: str) -> float:
     """
-    Get current 3-Month Treasury Bill rate from FRED.
-    DTB3 = 3-Month Treasury Bill Secondary Market Rate
-    Returns annualized rate as decimal.
+    Internal cached function keyed by date string.
+    Cache refreshes daily since cache_date changes each day.
     """
     try:
-        # Fetch last 30 days to ensure we get a recent value
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         
         series = fetch_fred_series("DTB3", start_date, end_date)
         
         if not series.empty:
-            # DTB3 is already in percentage (e.g., 4.5 = 4.5%), convert to decimal
             rate = series.iloc[-1] / 100
-            print(f"Current T-Bill rate from FRED: {rate:.4f}")
+            logger.info(f"Current T-Bill rate from FRED: {rate:.4f}")
             return float(rate)
     except Exception as e:
-        print(f"Error fetching risk-free rate: {e}")
+        logger.error(f"Error fetching risk-free rate: {e}")
     
-    # Fallback to reasonable default
-    print("Using default risk-free rate: 4.5%")
+    logger.info("Using default risk-free rate: 4.5%")
     return 0.045
+
+
+def get_risk_free_rate() -> float:
+    """
+    Get current 3-Month Treasury Bill rate from FRED.
+    DTB3 = 3-Month Treasury Bill Secondary Market Rate
+    Returns annualized rate as decimal.
+    Cache refreshes daily.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    return _get_risk_free_rate_cached(today)
 
 
 @memory.cache  
@@ -315,7 +325,7 @@ def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Opt
     series = fetch_fred_series("DTB3", start_date, end_date)
     
     if series.empty:
-        print("Warning: Could not fetch T-Bill history from FRED. Using constant rate.")
+        logger.warning("Could not fetch T-Bill history from FRED. Using constant rate.")
         dates = pd.date_range(start=start_date, end=end_date, freq="B")
         return pd.Series(0.045, index=dates)
     
@@ -351,10 +361,10 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
         all_open_data = {}
         ticker_start_dates = {}
         
-        print(f"Fetching data for {len(tickers)} tickers from Tiingo...")
+        logger.info(f"Fetching data for {len(tickers)} tickers from Tiingo...")
         
         for ticker in tickers:
-            print(f"  Fetching {ticker}...")
+            logger.debug(f"  Fetching {ticker}...")
             close_series, open_series = fetch_ticker_history(ticker, start_date, end_date)
             
             if not close_series.empty:
@@ -420,7 +430,7 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
                 detail=f"Insufficient data: only {len(close_prices)} days available (limiting ticker: {limiting_ticker})"
             )
         
-        print(f"Successfully fetched {len(close_prices)} days of close+open data for {len(tickers)} tickers")
+        logger.info(f"Successfully fetched {len(close_prices)} days of close+open data for {len(tickers)} tickers")
         
         return close_prices, open_prices, ticker_start_dates, limiting_ticker
         
