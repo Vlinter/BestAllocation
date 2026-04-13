@@ -24,7 +24,6 @@ interface UseOptimizationReturn {
     results: CompareResponse | null;
     error: string | null;
     runOptimization: (params: OptimizationParams) => Promise<void>;
-    clearResults: () => void;
 }
 
 /**
@@ -38,10 +37,7 @@ export function useOptimization(): UseOptimizationReturn {
     const [error, setError] = useState<string | null>(null);
     const [results, setResults] = useState<CompareResponse | null>(null);
 
-    const clearResults = useCallback(() => {
-        setResults(null);
-        setError(null);
-    }, []);
+
 
     const runOptimization = useCallback(async (params: OptimizationParams) => {
         setIsLoading(true);
@@ -134,6 +130,5 @@ export function useOptimization(): UseOptimizationReturn {
         results,
         error,
         runOptimization,
-        clearResults,
     };
 }

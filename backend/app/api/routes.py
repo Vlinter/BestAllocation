@@ -293,7 +293,11 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         response = CompareResponse(
             methods=method_results,
             benchmark_curve=benchmark_curve or [],
-            benchmark_metrics=benchmark_metrics or calculate_metrics(pd.Series([1.0]), rf_rate_current, 0, 0, 0),
+            benchmark_metrics=benchmark_metrics or PerformanceMetrics(
+                sharpe_ratio=0, sortino_ratio=0, max_drawdown=0, cagr=0,
+                total_return=0, volatility=0, calmar_ratio=0,
+                total_transaction_costs=0, num_rebalances=0, annualized_turnover=0
+            ),
             benchmark_name=benchmark_name,
             tickers=tickers,
             risk_free_rate=round(rf_rate_current, 4),

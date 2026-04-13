@@ -25,8 +25,7 @@ const OverfittingTable = lazy(() => import('../components/OverfittingTable'));
 const PerformanceHistogram = lazy(() => import('../components/PerformanceHistogram'));
 const RebalancerCard = lazy(() => import('../components/RebalancerCard'));
 const RollingSharpeChart = lazy(() => import('../components/RollingSharpeChart'));
-const StressTestCard = lazy(() => import('../components/StressTestCard'));
-const ExportButton = lazy(() => import('../components/ExportButton'));
+const StressTestCard = lazy(() => import('../components/StressTestCard'));
 
 interface RankingEntry {
     method: MethodResult;
@@ -155,9 +154,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
 
                         <ComparisonTable methods={results.methods} benchmarkMetrics={results.benchmark_metrics} benchmarkName={results.benchmark_name} />
                         <DataInfoCard tickerStartDates={results.ticker_start_dates} limitingTicker={results.limiting_ticker} dataStartDate={results.data_start_date} dataEndDate={results.data_end_date} />
-                        <Suspense fallback={null}>
-                            <ExportButton results={results} />
-                        </Suspense>
 
                         {/* Disclaimers — subtle, at the bottom */}
                         {results.warnings && results.warnings.length > 0 && (
@@ -175,6 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
 
             {/* TAB 1: PERFORMANCE */}
             <CustomTabPanel value={activeTab} index={1}>
+                <ErrorBoundary>
                 <Suspense fallback={<SkeletonLoader height={350} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <ComparisonChart methods={results.methods} benchmarkCurve={results.benchmark_curve} benchmarkName={results.benchmark_name} />
@@ -184,6 +181,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <ReturnsDistributionChart methods={results.methods} />
                     </Box>
                 </Suspense>
+                </ErrorBoundary>
             </CustomTabPanel>
 
             {/* TAB 2: RISK */}
@@ -201,6 +199,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
 
             {/* TAB 3: ALLOCATIONS */}
             <CustomTabPanel value={activeTab} index={3}>
+                <ErrorBoundary>
                 <Suspense fallback={<SkeletonLoader height={350} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <AllocationComparison methods={results.methods} date={results.data_end_date} />
@@ -213,10 +212,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <RebalancerCard methods={results.methods} tickers={results.tickers} />
                     </Box>
                 </Suspense>
+                </ErrorBoundary>
             </CustomTabPanel>
 
             {/* TAB 4: ANALYSIS */}
             <CustomTabPanel value={activeTab} index={4}>
+                <ErrorBoundary>
                 <Suspense fallback={<SkeletonLoader height={300} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <ModelHealthCards methods={results.methods} />
@@ -225,6 +226,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'gmv' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
                     </Box>
                 </Suspense>
+                </ErrorBoundary>
             </CustomTabPanel>
         </Box>
     );

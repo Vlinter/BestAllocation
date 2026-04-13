@@ -9,7 +9,7 @@ from pypfopt.exceptions import OptimizationError
 from .config import (
     TRADING_DAYS_PER_YEAR,
     COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY,
-    MVO_L2_GAMMA
+    MVO_L2_GAMMA, MONTE_CARLO_SIMULATIONS
 )
 
 # Configure module logger
@@ -500,7 +500,7 @@ def calculate_efficient_frontier(returns: pd.DataFrame, min_weight: float = 0.0,
             })
 
         # 1. Monte Carlo Simulations (The "Cloud")
-        num_simulations = 2000
+        num_simulations = MONTE_CARLO_SIMULATIONS
         simulations = []
         n_assets = len(mu)
         

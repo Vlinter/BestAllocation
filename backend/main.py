@@ -39,6 +39,7 @@ app.add_middleware(
 # ============================================================================
 RATE_LIMIT_REQUESTS = 5   # max requests
 RATE_LIMIT_WINDOW = 60    # per 60 seconds
+RATE_LIMIT_MAX_IPS = 1000 # max tracked IPs to prevent memory leak
 _rate_limit_store: dict = defaultdict(list)
 
 @app.middleware("http")
@@ -47,10 +48,18 @@ async def rate_limit_middleware(request: Request, call_next):
     if request.url.path == "/api/compare/start" and request.method == "POST":
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
-        # Clean old entries
+        # Clean old entries for this IP
         _rate_limit_store[client_ip] = [
             t for t in _rate_limit_store[client_ip] if now - t < RATE_LIMIT_WINDOW
         ]
+        # Evict stale IPs globally to prevent unbounded growth
+        if len(_rate_limit_store) > RATE_LIMIT_MAX_IPS:
+            stale_ips = [
+                ip for ip, timestamps in _rate_limit_store.items()
+                if not timestamps or now - max(timestamps) > RATE_LIMIT_WINDOW
+            ]
+            for ip in stale_ips:
+                del _rate_limit_store[ip]
         if len(_rate_limit_store[client_ip]) >= RATE_LIMIT_REQUESTS:
             return JSONResponse(
                 status_code=429,
@@ -62,9 +71,6 @@ async def rate_limit_middleware(request: Request, call_next):
 # Include API Router
 # Prefix /api so we have clear valid namespace
 app.include_router(api_router, prefix="/api", tags=["api"])
-# Legacy support: include router at root for compatibility with existing frontend 
-# until frontend is fully updated to /api
-app.include_router(api_router, tags=["legacy"])
 
 # Serve frontend static files
 # Check if frontend/dist exists (production build)
