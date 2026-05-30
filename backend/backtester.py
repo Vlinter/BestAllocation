@@ -322,12 +322,10 @@ def walk_forward_backtest(
         execution_date = dates[execution_idx]
         prices_at_execution = open_prices_clean.iloc[execution_idx]  # Open of T+1
         
-        # For valuation before trade, use Close of T (current holdings value)
-        prices_at_valuation = prices_clean.iloc[current_idx]  # Close of T
-        
-        # Calculate Value of current holdings at Close(T) + Cash
-        value_held_shares = sum(current_shares.get(t, 0.0) * prices_at_valuation.get(t, 0.0) for t in tickers)
-        value_before_trade = value_held_shares + cash_balance
+        # Calculate Value of current holdings at execution time (Open T+1) + Cash
+        # This correctly handles overnight gaps
+        value_at_execution = sum(current_shares.get(t, 0.0) * prices_at_execution.get(t, 0.0) for t in tickers)
+        value_before_trade = value_at_execution + cash_balance
         
         # On first step, we start with 1.0 total equity
         if current_idx == training_window:
@@ -542,29 +540,7 @@ def get_equal_weight_benchmark(
     for i in range(start_offset, len(dates)):
         d_date = dates[i]
         
-        # Check rebalance
-        if day_counter >= rebalancing_window:
-            total_val = sum(current_amounts.values())
-            target_amount_per_asset = total_val / n
-            
-            # Calculate Turnover PCT: (Sum(|Target - Current_i|) / TotalVal) -> This is 2x turnover (buy+sell)
-            # We usually report one-sided turnover (sells / AUM).
-            # So we divide by 2 * TotalVal?
-            # Standard: Turnover = Sum(|w_new - w_old|) / 2.
-            # Here: Sum(|TargetAmt - CurrentAmt|) returns dollar diff sum.
-            # Div by TotalVal gives Sum(|TargetW - CurrentW|).
-            # So: (SumAbsDiff / TotalVal) / 2
-            
-            diff_sum = sum(abs(target_amount_per_asset - current_amounts[t]) for t in tickers)
-            if total_val > 0:
-                turnover_pct_event = (diff_sum / total_val) / 2.0
-                total_turnover_pct += turnover_pct_event
-            
-            # Execute Rebalance
-            current_amounts = {t: target_amount_per_asset for t in tickers}
-            day_counter = 0
-            
-        # Apply Daily Return
+        # 1. Apply Daily Return FIRST (market moves)
         daily_rets = returns.iloc[i] 
         total_val_today = 0.0
         
@@ -581,6 +557,21 @@ def get_equal_weight_benchmark(
         })
         
         day_counter += 1
+
+        # 2. Rebalance AT THE END of the day if needed
+        if day_counter >= rebalancing_window:
+            total_val = sum(current_amounts.values())
+            target_amount_per_asset = total_val / n
+            
+            # Calculate Turnover PCT (one-sided)
+            diff_sum = sum(abs(target_amount_per_asset - current_amounts[t]) for t in tickers)
+            if total_val > 0:
+                turnover_pct_event = (diff_sum / total_val) / 2.0
+                total_turnover_pct += turnover_pct_event
+            
+            # Execute Rebalance for the next day
+            current_amounts = {t: target_amount_per_asset for t in tickers}
+            day_counter = 0
 
     annualized_turnover = total_turnover_pct / max(years, 0.01)
     

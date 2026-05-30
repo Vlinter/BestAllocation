@@ -430,17 +430,9 @@ def optimize_with_fallback(
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
 
              ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-             # L2 Regularization: penalize concentrated weights for better diversification
-             ef.add_objective(objective_functions.L2_reg, gamma=MVO_L2_GAMMA)
              try:
-                # Suppress pypfopt warning: "max_sharpe transforms the optimization
-                # problem so additional objectives may not work as expected."
-                # This is expected — L2 regularization still works correctly.
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", UserWarning)
-                    ef.max_sharpe(risk_free_rate=risk_free_rate)
-                return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
+                 ef.max_sharpe(risk_free_rate=risk_free_rate)
+                 return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
                 
              except (ValueError, OptimizationError) as e:
                  logger.warning(f"MVO Max Sharpe solver failed ({e}). Defaulting to Cash.")

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { startComparisonJob, getJobStatus } from '../api/client';
 import type { CompareRequest, CompareResponse } from '../api/client';
 
@@ -37,7 +37,14 @@ export function useOptimization(): UseOptimizationReturn {
     const [error, setError] = useState<string | null>(null);
     const [results, setResults] = useState<CompareResponse | null>(null);
 
+    const isMounted = useRef(true);
 
+    useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
 
     const runOptimization = useCallback(async (params: OptimizationParams) => {
         setIsLoading(true);
@@ -102,15 +109,15 @@ export function useOptimization(): UseOptimizationReturn {
 
                     // Continue polling if not done
                     if (status.status === 'queued' || status.status === 'processing') {
-                        setTimeout(poll, pollInterval);
+                        if (isMounted.current && isPolling) setTimeout(poll, pollInterval);
                     }
                 } catch (err) {
                     // Retry on transient network errors
-                    if (isPolling) setTimeout(poll, pollInterval);
+                    if (isMounted.current && isPolling) setTimeout(poll, pollInterval);
                 }
             };
 
-            poll();
+            if (isMounted.current) poll();
 
         } catch (err: unknown) {
             const error = err as { response?: { data?: { detail?: string } }; message?: string };
