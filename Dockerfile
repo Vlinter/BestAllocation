@@ -25,7 +25,7 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 RUN mkdir -p /app/.cache/joblib
 ENV JOBLIB_CACHE_DIR=/app/.cache/joblib
 
-# Expose port (Railway uses PORT env var)
+# Expose port (Render uses PORT env var)
 ENV PORT=8000
 EXPOSE $PORT
 
