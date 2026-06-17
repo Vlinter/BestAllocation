@@ -208,12 +208,22 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         # 2. Parallel Execution
         total_methods = len(methods_to_run)
-        progress_per_method = 70 // total_methods
-        completed_methods = 0
         
         job_manager.update_job(job_id, 15, f"Running {', '.join([m.upper() for m in methods_to_run])} in parallel...")
         
-        noop_callback = lambda p: None
+        method_progress = {m: 0.0 for m in methods_to_run}
+        
+        def make_progress_callback(method_name):
+            def callback(p):
+                method_progress[method_name] = p
+                total_p = sum(method_progress.values()) / total_methods
+                current_progress = 15 + (total_p * 70)
+                job_manager.update_job(
+                    job_id, 
+                    int(current_progress), 
+                    f"Optimizing ({int(total_p * 100)}%)"
+                )
+            return callback
         
         with ThreadPoolExecutor(max_workers=min(total_methods, 4)) as executor:
             future_to_method = {
@@ -227,7 +237,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                     trading_days_per_year, 
                     cvar_alpha, 
                     job_id, 
-                    noop_callback
+                    make_progress_callback(method)
                 ): method 
                 for method in methods_to_run
             }
@@ -241,8 +251,10 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                 except Exception as exc:
                     logger.error(f"Strategy {method} generated an exception: {exc}")
                 
-                completed_methods += 1
-                current_progress = 15 + (completed_methods * progress_per_method)
+                # Make sure this method is marked 100% complete internally
+                method_progress[method] = 1.0
+                total_p = sum(method_progress.values()) / total_methods
+                current_progress = 15 + (total_p * 70)
                 job_manager.update_job(job_id, int(current_progress), f"Completed {METHOD_NAMES.get(method, method)}...")
 
         # Benchmark Logic
