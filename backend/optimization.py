@@ -286,82 +286,6 @@ def optimize_hrp(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
 
 
 # ============================================================================
-# Risk Parity (Equal Risk Contribution) Implementation
-# ============================================================================
-
-def optimize_risk_parity(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: float = 1.0, **kwargs) -> Dict[str, float]:
-    """
-    Equal Risk Contribution (Risk Parity) portfolio.
-    
-    Finds weights such that each asset contributes equally to total portfolio risk.
-    Uses scipy SLSQP optimizer to minimize the sum of squared differences
-    between each asset's risk contribution and the target (1/N).
-    
-    Args:
-        returns: DataFrame of asset returns
-        min_weight: Minimum weight per asset
-        max_weight: Maximum weight per asset
-    
-    Returns:
-        Dict of ticker -> weight
-    """
-    from scipy.optimize import minimize
-    
-    tickers = list(returns.columns)
-    n = len(tickers)
-    cov = returns.cov().values
-    
-    def risk_contribution_objective(w):
-        """Minimize sum of squared differences from equal risk contribution."""
-        w = np.array(w)
-        port_var = w @ cov @ w
-        if port_var < 1e-16:
-            return 1e10
-        port_vol = np.sqrt(port_var)
-        
-        # Marginal risk contribution
-        mcr = cov @ w / port_vol
-        # Risk contribution = w_i * MCR_i
-        rc = w * mcr
-        # Target: each contributes 1/n of total vol
-        target_rc = port_vol / n
-        
-        # Minimize squared deviations from target
-        return np.sum((rc - target_rc) ** 2)
-    
-    try:
-        # Initial guess: inverse variance
-        diag = np.diag(cov).copy()
-        diag[diag < 1e-12] = 1e-12
-        x0 = (1.0 / diag) / (1.0 / diag).sum()
-        
-        # Constraints: weights sum to 1
-        constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}]
-        bounds = [(max(min_weight, 1e-6), max_weight)] * n
-        
-        result = minimize(
-            risk_contribution_objective,
-            x0,
-            method='SLSQP',
-            bounds=bounds,
-            constraints=constraints,
-            options={'maxiter': 500, 'ftol': 1e-12}
-        )
-        
-        if result.success:
-            weights = {tickers[i]: float(result.x[i]) for i in range(n)}
-            return safe_clean_weights(weights)
-        else:
-            logger.warning(f"Risk Parity optimization did not converge: {result.message}. Using inverse variance fallback.")
-            # Fallback to inverse variance
-            weights = {tickers[i]: float(x0[i]) for i in range(n)}
-            return safe_clean_weights(weights)
-    except Exception as e:
-        logger.warning(f"Risk Parity optimization failed: {e}. Using equal weight.")
-        return {col: 1.0 / n for col in tickers}
-
-
-# ============================================================================
 # Optimizer Dispatch
 # ============================================================================
 
@@ -371,7 +295,6 @@ def get_optimizer(method: str):
         "hrp": optimize_hrp,
         "gmv": None,  # GMV handled inline in optimize_with_fallback
         "mvo": None,  # MVO handled inline in optimize_with_fallback
-        "risk_parity": None,  # Risk Parity handled inline in optimize_with_fallback
     }.get(method, optimize_hrp)
 
 
@@ -450,10 +373,6 @@ def optimize_with_fallback(
             ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
             ef.min_volatility()
             return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
-        
-        elif method == "risk_parity":
-            weights = optimize_risk_parity(returns, min_weight=min_weight, max_weight=max_weight)
-            return OptimizationResult(weights=weights, fallback_used=False)
         
         else:
             return OptimizationResult(

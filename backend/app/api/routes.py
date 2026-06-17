@@ -46,6 +46,15 @@ def sanitize_nan(obj):
         return obj
     return obj
 
+def downsample_curve(curve_data: list, max_points: int = 500) -> list:
+    """Downsample a time series curve to reduce JSON payload size."""
+    if not curve_data or len(curve_data) <= max_points:
+        return curve_data
+    
+    step = len(curve_data) / max_points
+    return [curve_data[int(i * step)] for i in range(max_points)]
+
+
 # Model parameters helper
 def get_model_params(method: str) -> ModelParams:
     if method == "mvo":
@@ -147,11 +156,15 @@ def _run_strategy(
         
         method_params = get_model_params(method)
         
+        # Downsample for network payload efficiency
+        equity_curve_payload = downsample_curve(equity_curve, 500)
+        drawdown_curve_payload = downsample_curve(drawdown_curve, 500)
+        
         return MethodResult(
             method=method,
             method_name=METHOD_NAMES.get(method, method),
-            equity_curve=equity_curve,
-            drawdown_curve=drawdown_curve,
+            equity_curve=equity_curve_payload,
+            drawdown_curve=drawdown_curve_payload,
             performance_metrics=performance_metrics,
             current_allocation=current_alloc,
             allocation_history=allocation_history,
@@ -292,7 +305,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         response = CompareResponse(
             methods=method_results,
-            benchmark_curve=benchmark_curve or [],
+            benchmark_curve=downsample_curve(benchmark_curve, 500) if benchmark_curve else [],
             benchmark_metrics=benchmark_metrics or PerformanceMetrics(
                 sharpe_ratio=0, sortino_ratio=0, max_drawdown=0, cagr=0,
                 total_return=0, volatility=0, calmar_ratio=0,

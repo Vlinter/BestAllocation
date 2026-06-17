@@ -381,44 +381,47 @@ def walk_forward_backtest(
         allocation_history.append(alloc_entry)
         rebalance_dates.append(current_date.strftime("%Y-%m-%d"))
 
-        # 4. WALK FORWARD (HOLDING PERIOD)
+        # 4. WALK FORWARD (HOLDING PERIOD) (VECTORIZED)
         # Start from execution day (T+1) since that's when we actually hold the new positions
         next_rebalance_idx = min(current_idx + rebalancing_window, len(dates))
         holding_start_idx = execution_idx  # Start from T+1 where we executed
         
-        # Set static daily rate if using flat rate
-        static_daily_rf = 0.0
-        if not isinstance(risk_free_rate, pd.Series):
-             static_daily_rf = risk_free_rate / trading_days_per_year if trading_days_per_year > 0 else 0.0
-        
-        period_values = []
-        for d_idx in range(holding_start_idx, next_rebalance_idx):
-            d_date = dates[d_idx]
-            d_prices = prices_clean.iloc[d_idx]  # Close prices for valuation
+        if holding_start_idx < next_rebalance_idx:
+            prices_block = prices_clean.iloc[holding_start_idx:next_rebalance_idx]
+            block_dates = prices_block.index
             
-            # Portfolio Value = Sum(Shares * Price) + Cash
-            # Note: This naturally handles "drift"
-            day_val_shares = sum(current_shares[t] * d_prices[t] for t in tickers)
+            # Vectorized Shares Value
+            shares_vec = np.array([current_shares[t] for t in tickers])
+            day_val_shares_array = np.dot(prices_block.values, shares_vec)
             
-            # Accrue interest on cash daily
-            if d_idx > current_idx: # Apply interest for overnight hold
-                 # Determine daily rate
-                 if isinstance(risk_free_rate, pd.Series):
-                     d_rf_annual = float(risk_free_rate.asof(d_date))
-                     if pd.isna(d_rf_annual): d_rf_annual = 0.04
-                     daily_rf_rate = d_rf_annual / trading_days_per_year if trading_days_per_year > 0 else 0.0
-                 else:
-                     daily_rf_rate = static_daily_rf
-                     
-                 cash_balance *= (1 + daily_rf_rate)
-                 
-            day_val = day_val_shares + cash_balance
+            # Vectorized Cash Accrual
+            if isinstance(risk_free_rate, pd.Series):
+                period_rf_annual = risk_free_rate.reindex(block_dates, method='ffill').fillna(0.04).values
+                daily_rf_rates = period_rf_annual / trading_days_per_year if trading_days_per_year > 0 else np.zeros(len(block_dates))
+            else:
+                static_daily_rf = risk_free_rate / trading_days_per_year if trading_days_per_year > 0 else 0.0
+                daily_rf_rates = np.full(len(block_dates), static_daily_rf)
             
-            equity_curve.append({
-                "date": float(d_date.timestamp() * 1000),
-                "value": round(float(day_val), 6)
-            })
-            period_values.append(day_val)
+            # d_idx is always > current_idx since holding_start_idx >= current_idx + 1
+            cash_multipliers = 1.0 + daily_rf_rates
+            cash_balances = cash_balance * np.cumprod(cash_multipliers)
+            
+            # Total Daily Value
+            day_vals = day_val_shares_array + cash_balances
+            
+            # Update state for next period
+            cash_balance = cash_balances[-1]
+            period_values = day_vals.tolist()
+            
+            # Batch append to equity curve
+            timestamps = block_dates.astype(np.int64) // 10**6  # Convert ns to ms
+            for i in range(len(block_dates)):
+                equity_curve.append({
+                    "date": float(timestamps[i]),
+                    "value": round(float(day_vals[i]), 6)
+                })
+        else:
+            period_values = []
         
         # 5. OVERFITTING METRICS
         # Predicted Sharpe (Optimizer's Expectation) vs Realized (Next Period)
@@ -504,74 +507,57 @@ def get_equal_weight_benchmark(
     if start_offset >= len(dates):
         return [], 0.0
 
-    # Initial Setup
-    value = 1.0 # Indexed to 1.0
-    
-    # We simulate effectively 'Share-based' but can be simplified:
-    # At rebalance, we reset weights to 1/N.
-    # Between rebalances, we apply actual daily returns.
-    
-    current_idx = start_offset
-    
-    returns = prices_clean.pct_change()
-    
-    # Current "Weights" in value terms (amounts invested per asset)
-    # Start: 1.0 split N ways
-    # Calculate Annualized Turnover
-    # Years logic
     trading_days = infer_trading_frequency(dates)
     years = (len(dates) - start_offset) / trading_days
     
-    # We tracked DOLLAR turnover. We need to normalize it.
-    # However, since portfolio value grows, dollar turnover is not comparable.
-    # The correct way is to sum (Turnover$ / Value$) at each rebalance.
-    
-    # Let's fix the loop logic instead of post-processing.
-    # We need to restart the loop logic above to track pct turnover.
-    # Re-writing loop logic:
+    # Vectorized setup
+    returns = prices_clean.pct_change().fillna(0.0)
+    returns_block = returns.iloc[start_offset:]
+    dates_block = dates[start_offset:]
     
     n = len(tickers)
-    current_amounts = {t: value / n for t in tickers}
-    day_counter = 0
+    current_amounts = np.full(n, 1.0 / n)
     total_turnover_pct = 0.0
     
-    benchmark_values = [] # reset
+    timestamps = dates_block.astype(np.int64) // 10**6
+    returns_values = returns_block[tickers].values # shape (T, N)
     
-    for i in range(start_offset, len(dates)):
-        d_date = dates[i]
+    T = len(dates_block)
+    
+    for chunk_start in range(0, T, rebalancing_window):
+        chunk_end = min(chunk_start + rebalancing_window, T)
         
-        # 1. Apply Daily Return FIRST (market moves)
-        daily_rets = returns.iloc[i] 
-        total_val_today = 0.0
+        # Returns for this chunk
+        chunk_rets = returns_values[chunk_start:chunk_end]
         
-        for t in tickers:
-            r = daily_rets.get(t, 0.0)
-            if pd.isna(r): r = 0.0
-            
-            current_amounts[t] *= (1 + r)
-            total_val_today += current_amounts[t]
-            
-        benchmark_values.append({
-            "date": float(d_date.timestamp() * 1000),
-            "value": round(float(total_val_today), 6)
-        })
+        # Cumulative multipliers for the chunk
+        cum_multipliers = np.cumprod(1.0 + chunk_rets, axis=0)
         
-        day_counter += 1
-
-        # 2. Rebalance AT THE END of the day if needed
-        if day_counter >= rebalancing_window:
-            total_val = sum(current_amounts.values())
-            target_amount_per_asset = total_val / n
+        # Asset amounts over time in the chunk
+        amounts_over_time = current_amounts * cum_multipliers
+        
+        # Portfolio value over time
+        total_vals = amounts_over_time.sum(axis=1)
+        
+        # Batch append to benchmark_values
+        for i in range(len(total_vals)):
+            idx = chunk_start + i
+            benchmark_values.append({
+                "date": float(timestamps[idx]),
+                "value": round(float(total_vals[i]), 6)
+            })
             
-            # Calculate Turnover PCT (one-sided)
-            diff_sum = sum(abs(target_amount_per_asset - current_amounts[t]) for t in tickers)
-            if total_val > 0:
-                turnover_pct_event = (diff_sum / total_val) / 2.0
-                total_turnover_pct += turnover_pct_event
+        # Rebalance at the end of the chunk (if not the last day)
+        if chunk_end < T:
+            end_val = total_vals[-1]
+            target_amount = end_val / n
+            end_amounts = amounts_over_time[-1]
             
-            # Execute Rebalance for the next day
-            current_amounts = {t: target_amount_per_asset for t in tickers}
-            day_counter = 0
+            if end_val > 0:
+                diff_sum = np.sum(np.abs(target_amount - end_amounts))
+                total_turnover_pct += (diff_sum / end_val) / 2.0
+                
+            current_amounts = np.full(n, target_amount)
 
     annualized_turnover = total_turnover_pct / max(years, 0.01)
     

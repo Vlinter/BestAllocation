@@ -45,7 +45,7 @@ def test_hrp_basic():
     assert "ivl" in dendrogram, "Dendrogram should contain 'ivl'"
     
     print(f"HRP Weights: {weights}")
-    print("✓ HRP basic test passed")
+    print("[OK] HRP basic test passed")
 
 
 def test_gmv_minimizes_variance():
@@ -80,7 +80,7 @@ def test_gmv_minimizes_variance():
     
     print(f"GMV Weights: {weights}")
     print(f"GMV Variance: {gmv_var:.6f}, EW Variance: {ew_var:.6f}")
-    print("✓ GMV minimizes variance test passed")
+    print("[OK] GMV minimizes variance test passed")
 
 
 def test_mvo_max_sharpe():
@@ -108,7 +108,7 @@ def test_mvo_max_sharpe():
         assert weights['A'] >= weights['B'], f"Expected A >= B, got A={weights['A']}, B={weights['B']}"
     
     print(f"MVO Weights: {weights}")
-    print("✓ MVO max sharpe test passed")
+    print("[OK] MVO max sharpe test passed")
 
 
 def test_mvo_constraints():
@@ -133,7 +133,7 @@ def test_mvo_constraints():
             assert w <= max_w + 0.001, f"{t} weight {w} above max {max_w}"
     
     print(f"MVO with constraints: {weights}")
-    print("✓ MVO constraints test passed")
+    print("[OK] MVO constraints test passed")
 
 
 def test_mvo_cash_fallback():
@@ -156,7 +156,7 @@ def test_mvo_cash_fallback():
     print(f"MVO with negative returns: {result.weights}, total={total_weight}")
     
     if total_weight < 0.01:
-        print("✓ MVO cash fallback test passed - went to cash")
+        print("[OK] MVO cash fallback test passed - went to cash")
     else:
         print("⚠ MVO did not go to cash - this may be acceptable depending on implementation")
 
@@ -182,7 +182,7 @@ def test_gmv_constraints():
         assert w <= max_w + 0.001, f"{t} weight {w} above max {max_w}"
     
     print(f"GMV with constraints: {weights}")
-    print("✓ GMV constraints test passed")
+    print("[OK] GMV constraints test passed")
 
 
 def test_weights_sum_to_one():
@@ -205,7 +205,7 @@ def test_weights_sum_to_one():
         assert total < 0.01 or abs(total - 1.0) < 1e-6, f"{method}: weights sum to {total}"
         print(f"{method.upper()}: sum={total:.6f}, fallback={result.fallback_used}")
     
-    print("✓ Weights sum test passed")
+    print("[OK] Weights sum test passed")
 
 
 if __name__ == "__main__":
@@ -232,10 +232,10 @@ if __name__ == "__main__":
             test()
             passed += 1
         except AssertionError as e:
-            print(f"❌ FAILED: {e}")
+            print(f"[FAILED]: {e}")
             failed += 1
         except Exception as e:
-            print(f"❌ ERROR: {e}")
+            print(f"[ERROR]: {e}")
             import traceback
             traceback.print_exc()
             failed += 1
@@ -245,6 +245,6 @@ if __name__ == "__main__":
     print("=" * 60)
     
     if failed == 0:
-        print("🎉 ALL OPTIMIZATION TESTS PASSED")
+        print("[SUCCESS] ALL OPTIMIZATION TESTS PASSED")
     else:
-        print("❌ Some tests failed")
+        print("[FAILED] Some tests failed")

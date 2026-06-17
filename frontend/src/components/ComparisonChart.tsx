@@ -15,7 +15,6 @@ import { format } from 'date-fns';
 import React, { useState, useMemo } from 'react';
 import type { CurvePoint, MethodResult } from '../api/client';
 import { TrendingUp, ShowChart } from '@mui/icons-material';
-import { downsampleSeries } from '../utils/chartUtils';
 
 interface ComparisonChartProps {
     methods: MethodResult[];
@@ -49,8 +48,8 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
             return dataPoint;
         });
 
-        // Downsample to max 500 points for performance
-        return downsampleSeries(rawData, 500);
+        // Data is already downsampled by the backend
+        return rawData;
     }, [methods, benchmarkCurve]);
 
     // Calculate final returns for display

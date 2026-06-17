@@ -356,27 +356,40 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
             # Fetch maximum available history (since 1990)
             start_date = "1990-01-01"
         
-        # Fetch data for each ticker
+        # Fetch data for each ticker using ThreadPoolExecutor for parallelism
         all_close_data = {}
         all_open_data = {}
         ticker_start_dates = {}
         
         logger.info(f"Fetching data for {len(tickers)} tickers from Tiingo...")
         
-        for ticker in tickers:
+        import concurrent.futures
+        
+        def fetch_worker(ticker):
             logger.debug(f"  Fetching {ticker}...")
-            close_series, open_series = fetch_ticker_history(ticker, start_date, end_date)
-            
-            if not close_series.empty:
-                all_close_data[ticker] = close_series
-                all_open_data[ticker] = open_series
-                first_valid = close_series.first_valid_index()
-                if first_valid is not None:
-                    ticker_start_dates[ticker] = first_valid.strftime("%Y-%m-%d")
-                else:
+            close_s, open_s = fetch_ticker_history(ticker, start_date, end_date)
+            return ticker, close_s, open_s
+
+        # Limit to 5 concurrent workers to respect API limits loosely
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_ticker = {executor.submit(fetch_worker, ticker): ticker for ticker in tickers}
+            for future in concurrent.futures.as_completed(future_to_ticker):
+                ticker = future_to_ticker[future]
+                try:
+                    t, close_series, open_series = future.result()
+                    if not close_series.empty:
+                        all_close_data[t] = close_series
+                        all_open_data[t] = open_series
+                        first_valid = close_series.first_valid_index()
+                        if first_valid is not None:
+                            ticker_start_dates[t] = first_valid.strftime("%Y-%m-%d")
+                        else:
+                            ticker_start_dates[t] = "N/A"
+                    else:
+                        ticker_start_dates[t] = "N/A"
+                except Exception as e:
+                    logger.error(f"Error fetching {ticker}: {e}")
                     ticker_start_dates[ticker] = "N/A"
-            else:
-                ticker_start_dates[ticker] = "N/A"
         
         # Check if we got any data
         if not all_close_data:

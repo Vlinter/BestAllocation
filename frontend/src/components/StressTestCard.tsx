@@ -28,7 +28,6 @@ const METHOD_COLORS: Record<string, string> = {
     hrp: '#00D4AA',
     gmv: '#FFE66D',
     mvo: '#A78BFA',
-    risk_parity: '#F472B6',
 };
 
 const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
