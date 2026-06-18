@@ -5,7 +5,7 @@
 **BestAllocation** est une application web fullstack de **comparaison de stratégies d'allocation de portefeuille**. L'utilisateur entre des tickers financiers (actions, ETFs, cryptos), et le système :
 
 1. Récupère les données historiques de marché (Tiingo API, avec fallback Yahoo Finance)
-2. Exécute un **backtest Walk-Forward réaliste** pour **3 stratégies d'optimisation** (HRP, GMV, MVO)
+2. Exécute un **backtest Walk-Forward réaliste** pour **3 stratégies d'optimisation** (HRP, CVaR, MVO)
 3. Calcule **16+ métriques de performance** (Sharpe, Sortino, Max Drawdown, Alpha, Beta, Omega…)
 4. Affiche les résultats dans une **interface React interactive** avec 9 types de graphiques
 
@@ -90,7 +90,7 @@ GET /api/jobs/{job_id}   ←  Polling du frontend (progress %)
 ```python
 with ThreadPoolExecutor(max_workers=min(N_methods, 4)) as executor:
     futures = {executor.submit(_run_strategy, method, ...): method
-               for method in ["hrp", "gmv", "mvo"]}
+               for method in ["hrp", "cvar", "mvo"]}
 ```
 
 Les 3 stratégies sont calculées **en parallèle** puis les résultats sont triés par Sortino Ratio décroissant.
@@ -220,7 +220,7 @@ $$w_i^{IVP} = \frac{1/\sigma_i^2}{\sum_j 1/\sigma_j^2}, \quad \text{Var}(\text{c
 
 ---
 
-### Stratégie 2 : GMV (Global Minimum Variance)
+### Stratégie 2 : CVaR (Conditional Value at Risk)
 
 #### Concept
 Trouve le portefeuille qui a la **plus faible volatilité possible**, sans considérer les rendements. Approche la plus conservatrice.
@@ -317,13 +317,13 @@ $$\lambda_{\text{JS}} = \max\left(0, \; 1 - \frac{p-2}{\sum_i (\mu_i - \bar{\mu}
 |---|---|
 | 0.0 | Rendements bruts (agressif, overfitting) |
 | **0.5** | **Défaut** — Équilibre signal/bruit |
-| 1.0 | Tous les actifs ont même rendement attendu → revient à GMV |
+| 1.0 | Tous les actifs ont même rendement attendu → revient à CVaR |
 
 ---
 
 ##### 3. Ledoit-Wolf Covariance Shrinkage
 
-Identique à GMV. Garantit $\Sigma$ bien conditionnée et inversible.
+Identique à CVaR. Garantit $\Sigma$ bien conditionnée et inversible.
 
 ---
 
@@ -611,12 +611,12 @@ En production, **FastAPI sert directement le frontend** compilé (pas de serveur
 ## 🎤 Cheat Sheet pour Entretien
 
 ### Le pitch (30 secondes)
-> "J'ai développé une appli fullstack React/FastAPI qui compare 3 stratégies d'allocation de portefeuille — HRP, GMV et MVO — via un backtest Walk-Forward réaliste. Le backend Python fait l'optimisation, le backtesting et le calcul de métriques, le frontend React affiche 9 types de visualisations interactives."
+> "J'ai développé une appli fullstack React/FastAPI qui compare 3 stratégies d'allocation de portefeuille — HRP, CVaR et MVO — via un backtest Walk-Forward réaliste. Le backend Python fait l'optimisation, le backtesting et le calcul de métriques, le frontend React affiche 9 types de visualisations interactives."
 
 ### Questions techniques fréquentes et réponses
 
 **Q: Pourquoi 3 stratégies et pas une seule ?**
-> Chacune a une philosophie différente : HRP utilise le clustering (pas de rendements attendus), GMV minimise le risque pur, MVO maximise le Sharpe. Les comparer permet de voir laquelle aurait été la meilleure historiquement.
+> Chacune a une philosophie différente : HRP utilise le clustering (pas de rendements attendus), CVaR minimise le risque pur, MVO maximise le Sharpe. Les comparer permet de voir laquelle aurait été la meilleure historiquement.
 
 **Q: Qu'est-ce qui rend ton backtest réaliste ?**
 > Exécution à l'Open(T+1) et non au Close(T) (pas de look-ahead), conversion en nombre entier d'actions (pas de fractions), coûts de transaction sur le turnover, intérêts sur le cash, drift naturel entre rebalancements.

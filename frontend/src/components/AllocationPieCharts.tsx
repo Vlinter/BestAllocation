@@ -21,7 +21,7 @@ const METHOD_COLORS: Record<string, { primary: string; glow: string; gradient: s
         glow: 'rgba(0, 212, 170, 0.4)',
         gradient: 'linear-gradient(135deg, rgba(0, 212, 170, 0.15) 0%, rgba(0, 212, 170, 0.05) 100%)'
     },
-    gmv: {
+    cvar: {
         primary: '#FFE66D',
         glow: 'rgba(255, 230, 109, 0.4)',
         gradient: 'linear-gradient(135deg, rgba(255, 230, 109, 0.15) 0%, rgba(255, 230, 109, 0.05) 100%)'

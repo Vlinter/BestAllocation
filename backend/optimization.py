@@ -3,7 +3,7 @@ import pandas as pd
 import logging
 from typing import Dict, List, Tuple, Optional
 from pypfopt import expected_returns, risk_models, objective_functions
-from pypfopt import EfficientFrontier
+from pypfopt import EfficientFrontier, EfficientCVaR
 from pypfopt.exceptions import OptimizationError
 
 from .config import (
@@ -293,7 +293,7 @@ def get_optimizer(method: str):
     """Return the optimizer function for the given method."""
     return {
         "hrp": optimize_hrp,
-        "gmv": None,  # GMV handled inline in optimize_with_fallback
+        "cvar": None,  # CVaR handled inline in optimize_with_fallback
         "mvo": None,  # MVO handled inline in optimize_with_fallback
     }.get(method, optimize_hrp)
 
@@ -366,13 +366,23 @@ def optimize_with_fallback(
                     fallback_reason=f"MVO Solver Failed: {e} -> Cash"
                  )
             
-        elif method == "gmv":
+        elif method == "cvar":
             mu = expected_returns.mean_historical_return(returns, returns_data=True, frequency=frequency)
-            S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
             
-            ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-            ef.min_volatility()
-            return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
+            # PyPortfolioOpt EfficientCVaR uses 'beta' for confidence level (e.g., 0.95)
+            beta = 1.0 - alpha
+            
+            try:
+                ec = EfficientCVaR(mu, returns, beta=beta, weight_bounds=(min_weight, max_weight))
+                ec.min_cvar()
+                return OptimizationResult(weights=safe_clean_weights(ec.clean_weights()))
+            except (ValueError, OptimizationError) as e:
+                logger.warning(f"CVaR solver failed ({e}). Defaulting to Equal Weight.")
+                return OptimizationResult(
+                    weights=equal_weights,
+                    fallback_used=True,
+                    fallback_reason=f"CVaR Solver Failed: {e}"
+                )
         
         else:
             return OptimizationResult(

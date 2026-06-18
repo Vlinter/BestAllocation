@@ -21,7 +21,7 @@ interface RollingSharpeChartProps {
 
 const METHOD_COLORS: Record<string, string> = {
     hrp: '#00D4AA',
-    gmv: '#FFE66D',
+    cvar: '#FFE66D',
     mvo: '#A78BFA',
 };
 

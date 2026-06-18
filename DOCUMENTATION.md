@@ -67,7 +67,7 @@ w_droite *= (1 - α)
 
 ---
 
-### 2. GMV (Global Minimum Variance)
+### 2. CVaR (Conditional Value at Risk)
 
 **Principe:** Minimise la variance totale du portefeuille sans considérer les rendements.
 
@@ -485,7 +485,7 @@ d_ij = √(0.5 × (1 - ρ_ij))
 ```
 backend/
 ├── main.py           # API FastAPI, endpoints
-├── optimization.py   # HRP, GMV, MVO algorithms
+├── optimization.py   # HRP, CVaR, MVO algorithms
 ├── backtester.py     # Walk-forward engine
 ├── metrics.py        # Performance calculations
 ├── config.py         # Constants

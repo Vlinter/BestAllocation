@@ -17,7 +17,7 @@ const COLORS = [
 
 const methodNames: Record<string, string> = {
     hrp: 'Hierarchical Risk Parity',
-    gmv: 'Global Minimum Variance',
+    cvar: 'Conditional Value at Risk',
     mdr: 'Max Diversification Ratio',
 };
 

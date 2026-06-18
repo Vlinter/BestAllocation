@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 METHOD_NAMES = {
     "hrp": "HRP (Hierarchical Risk Parity)",
-    "gmv": "GMV (Global Minimum Variance)",
+    "cvar": "CVaR (Conditional Value at Risk)",
     "mvo": "MVO (Mean-Variance Max Sharpe)"
 }
 
@@ -59,7 +59,7 @@ def downsample_curve(curve_data: list, max_points: int = 500) -> list:
 def get_model_params(method: str) -> ModelParams:
     if method == "mvo":
         return ModelParams()
-    elif method == "gmv":
+    elif method == "cvar":
         return ModelParams()
     elif method == "hrp":
         return ModelParams(linkage_method="Ward Linkage")
@@ -77,7 +77,7 @@ async def health():
 async def version():
     return {
         "version": "2.4.0-refactored",
-        "methods": ["hrp", "gmv", "mvo"],
+        "methods": ["hrp", "cvar", "mvo"],
         "features": ["walk_forward", "transaction_costs", "volatility_scaling"]
     }
 
@@ -199,8 +199,8 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         job_manager.update_job(job_id, 15, "Preparing Backtest Engine...")
         
-        cvar_alpha = 0.05 
-        methods_to_run = ["hrp", "gmv", "mvo"]
+        cvar_alpha = 1.0 - getattr(request, 'cvar_confidence', 0.95)
+        methods_to_run = ["hrp", "cvar", "mvo"]
         method_results = []
         benchmark_curve = None
         benchmark_metrics = None
@@ -301,7 +301,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             data_warnings.append(
                 "HRP ignores min/max weight constraints by design (López de Prado, 2016). "
                 "The recursive bisection naturally produces diversified weights. "
-                "Constraints only apply to GMV and MVO."
+                "Constraints only apply to CVaR and MVO."
             )
         correlation_matrix = calculate_correlation_matrix(prices)
 

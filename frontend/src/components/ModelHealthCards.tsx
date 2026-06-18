@@ -135,7 +135,7 @@ interface ModelHealthCardsProps {
 
 const METHOD_COLORS: Record<string, string> = {
     nco: '#00D4AA',
-    gmv: '#FFE66D',
+    cvar: '#FFE66D',
     mdr: '#A78BFA',
 };
 

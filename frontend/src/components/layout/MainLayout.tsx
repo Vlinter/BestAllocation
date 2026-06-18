@@ -106,7 +106,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                         </Box>
 
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2 }}>
-                            <Typography variant="body1" sx={{ color: 'text.secondary' }}>Walk-Forward Analysis • HRP vs GMV vs MVO</Typography>
+                            <Typography variant="body1" sx={{ color: 'text.secondary' }}>Walk-Forward Analysis • HRP vs CVaR vs MVO</Typography>
                             {results && (
                                 <>
                                     <Chip label={`Risk-Free: ${(results.risk_free_rate * 100).toFixed(2)}%`} size="small" sx={{ bgcolor: 'rgba(59,130,246,0.15)', color: '#60A5FA', border: '1px solid rgba(59,130,246,0.3)', backdropFilter: 'blur(5px)' }} />

@@ -223,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <ModelHealthCards methods={results.methods} />
                         <StressTestCard methods={results.methods} />
                         <OverfittingTable methods={results.methods} />
-                        <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'gmv' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
+                        <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'cvar' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
                     </Box>
                 </Suspense>
                 </ErrorBoundary>

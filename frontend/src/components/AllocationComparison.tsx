@@ -12,7 +12,7 @@ interface AllocationComparisonProps {
 // Method details for consistent coloring/styling
 const METHOD_DETAILS: Record<string, { label: string; color: string }> = {
     mvo: { label: 'MVO (Mean-Variance)', color: '#A78BFA' },
-    gmv: { label: 'GMV (Min Variance)', color: '#FFE66D' },
+    cvar: { label: 'CVaR (Min CVaR)', color: '#FFE66D' },
     hrp: { label: 'HRP (Hierarchical Risk Parity)', color: '#00D4AA' },
     nco: { label: 'NCO (Legacy)', color: '#00D4AA' },
     cla: { label: 'CLA', color: '#F472B6' },

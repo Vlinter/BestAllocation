@@ -20,7 +20,7 @@ interface PerformanceHistogramProps {
 
 const METHOD_COLORS: Record<string, { main: string; light: string }> = {
     hrp: { main: '#00D4AA', light: '#00FFD4' },
-    gmv: { main: '#FFE66D', light: '#FFF094' },
+    cvar: { main: '#FFE66D', light: '#FFF094' },
     mvo: { main: '#A78BFA', light: '#C4B5FD' },
 };
 

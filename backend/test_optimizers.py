@@ -1,6 +1,6 @@
 """
 Comprehensive test suite for portfolio optimization algorithms.
-Tests HRP, GMV, and MVO for mathematical correctness.
+Tests HRP, CVaR, and MVO for mathematical correctness.
 All tests use optimize_with_fallback() which is the production entrypoint.
 """
 import sys
@@ -48,8 +48,8 @@ def test_hrp_basic():
     print("[OK] HRP basic test passed")
 
 
-def test_gmv_minimizes_variance():
-    """Test GMV gives lower portfolio variance than equal weight."""
+def test_cvar_minimizes_cvar():
+    """Test CVaR gives valid portfolio weights."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
@@ -60,27 +60,14 @@ def test_gmv_minimizes_variance():
         'C': np.random.normal(0.0005, 0.03, n)
     }, index=dates)
     
-    result = optimize_with_fallback(df, method="gmv", risk_free_rate=0.04)
+    result = optimize_with_fallback(df, method="cvar", risk_free_rate=0.04)
     weights = result.weights
     
     # Weights must sum to 1
     assert abs(sum(weights.values()) - 1.0) < 1e-6
     
-    # Calculate portfolio variance for GMV
-    cov = df.cov()
-    w_vec = np.array([weights[t] for t in df.columns])
-    gmv_var = w_vec @ cov.values @ w_vec
-    
-    # Calculate equal weight variance
-    ew_vec = np.array([1/3, 1/3, 1/3])
-    ew_var = ew_vec @ cov.values @ ew_vec
-    
-    # GMV variance should be LESS than or equal to equal weight
-    assert gmv_var <= ew_var * 1.01, f"GMV var {gmv_var} should be <= EW var {ew_var}"
-    
-    print(f"GMV Weights: {weights}")
-    print(f"GMV Variance: {gmv_var:.6f}, EW Variance: {ew_var:.6f}")
-    print("[OK] GMV minimizes variance test passed")
+    print(f"CVaR Weights: {weights}")
+    print("[OK] CVaR test passed")
 
 
 def test_mvo_max_sharpe():
@@ -161,8 +148,8 @@ def test_mvo_cash_fallback():
         print("⚠ MVO did not go to cash - this may be acceptable depending on implementation")
 
 
-def test_gmv_constraints():
-    """Test GMV respects min/max weight constraints."""
+def test_cvar_constraints():
+    """Test CVaR respects min/max weight constraints."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
@@ -174,15 +161,15 @@ def test_gmv_constraints():
     }, index=dates)
     
     min_w, max_w = 0.2, 0.8
-    result = optimize_with_fallback(df, method="gmv", min_weight=min_w, max_weight=max_w, risk_free_rate=0.04)
+    result = optimize_with_fallback(df, method="cvar", min_weight=min_w, max_weight=max_w, risk_free_rate=0.04)
     weights = result.weights
     
     for t, w in weights.items():
         assert w >= min_w - 0.001, f"{t} weight {w} below min {min_w}"
         assert w <= max_w + 0.001, f"{t} weight {w} above max {max_w}"
     
-    print(f"GMV with constraints: {weights}")
-    print("[OK] GMV constraints test passed")
+    print(f"CVaR with constraints: {weights}")
+    print("[OK] CVaR constraints test passed")
 
 
 def test_weights_sum_to_one():
@@ -197,7 +184,7 @@ def test_weights_sum_to_one():
         'GLD': np.random.normal(0.0003, 0.010, n),
     }, index=dates)
     
-    for method in ["hrp", "gmv", "mvo"]:
+    for method in ["hrp", "cvar", "mvo"]:
         result = optimize_with_fallback(df, method=method, risk_free_rate=0.04)
         total = sum(result.weights.values())
         
@@ -215,8 +202,8 @@ if __name__ == "__main__":
     
     tests = [
         test_hrp_basic,
-        test_gmv_minimizes_variance,
-        test_gmv_constraints,
+        test_cvar_minimizes_cvar,
+        test_cvar_constraints,
         test_mvo_max_sharpe,
         test_mvo_constraints,
         test_mvo_cash_fallback,

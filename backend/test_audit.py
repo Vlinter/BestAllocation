@@ -62,8 +62,8 @@ def test_omega_ratio_edge_case():
     print(f"Omega Ratio (no losses): {metrics.omega_ratio}")
 
 
-def test_gmv_optimization():
-    """Verify GMV optimization minimizes variance."""
+def test_cvar_optimization():
+    """Verify CVaR optimization minimizes tail risk."""
     # Create 3 assets with different volatilities
     np.random.seed(42)
     n = 500
@@ -80,10 +80,10 @@ def test_gmv_optimization():
     
     df = pd.DataFrame({'A': ret_a, 'B': ret_b, 'C': ret_c}, index=dates)
     
-    result = optimize_with_fallback(df, method="gmv", risk_free_rate=0.04)
+    result = optimize_with_fallback(df, method="cvar", risk_free_rate=0.04)
     weights = result.weights
     
-    print(f"GMV Weights: {weights}")
+    print(f"CVaR Weights: {weights}")
     
     # Asset A (lowest vol) should have highest weight
     assert weights['A'] > weights['B'], "Lower vol asset should have higher weight"
@@ -109,8 +109,8 @@ if __name__ == "__main__":
         test_omega_ratio_edge_case()
         print("✓ test_omega_ratio_edge_case passed")
         
-        test_gmv_optimization()
-        print("✓ test_gmv_optimization passed")
+        test_cvar_optimization()
+        print("✓ test_cvar_optimization passed")
         
         print("\n🎉 ALL TESTS PASSED")
     except AssertionError as e:

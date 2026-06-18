@@ -28,7 +28,7 @@ interface RebalancerCardProps {
 
 const METHOD_COLORS: Record<string, string> = {
     hrp: '#00D4AA',
-    gmv: '#60A5FA',
+    cvar: '#60A5FA',
     mvo: '#FBBF24',
     average: '#A78BFA',
 };

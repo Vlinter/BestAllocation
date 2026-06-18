@@ -8,7 +8,7 @@ The platform uses a rigorous Walk-Forward methodology to backtest trading strate
 
 ### Core Methodologies Supported
 - **HRP (Hierarchical Risk Parity)**: Uses graph theory and machine learning (hierarchical clustering) to allocate risk without requiring expected return estimates or covariance matrix inversion.
-- **GMV (Global Minimum Variance)**: Focuses entirely on minimizing portfolio volatility based on the covariance matrix.
+- **CVaR (Conditional Value at Risk)**: Focuses entirely on minimizing portfolio volatility based on the covariance matrix.
 - **MVO (Mean-Variance Optimization)**: The classic Markowitz model aiming to maximize the Sharpe ratio, balanced with specific risk and return constraints.
 - **Equal Weight (Benchmark)**: A naive allocation strategy used as a baseline for performance comparison.
 

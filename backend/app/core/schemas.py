@@ -10,7 +10,7 @@ class OptimizationRequest(BaseModel):
     tickers: List[str] = Field(..., description="List of ticker symbols", min_length=2)
     start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD) or None for earliest")
     end_date: Optional[str] = Field(default=None, description="End date (YYYY-MM-DD) or None for today")
-    method: Literal["hrp", "gmv", "mvo"] = Field(default="hrp")
+    method: Literal["hrp", "cvar", "mvo"] = Field(default="hrp")
     training_window: int = Field(default=252, ge=60, le=1260)
     rebalancing_window: int = Field(default=63, ge=5, le=126)
     transaction_cost_bps: float = Field(default=10, ge=0, le=100, description="Transaction cost in basis points")
@@ -120,8 +120,7 @@ class CompareRequest(BaseModel):
     enable_volatility_scaling: bool = Field(default=False, description="Enable adaptive volatility targeting")
     target_volatility: float = Field(default=0.12, ge=0.05, le=0.30, description="Target annualized volatility (5-30%)")
     # CVaR confidence level
-    # cvar_confidence removed/ignored for GMV
-    
+    cvar_confidence: float = Field(default=0.95, ge=0.5, le=0.99, description="CVaR confidence level")
     @field_validator('start_date', 'end_date', mode='before')
     @classmethod
     def validate_date_format(cls, v):

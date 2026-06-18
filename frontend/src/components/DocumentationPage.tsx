@@ -227,7 +227,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                         <Typography variant="h6" sx={{ mb: 2, mt: 3, color: '#00D4AA' }}>Step 3: Compare Methods</Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                             Click "Compare All Methods" to run three different optimization strategies simultaneously:
-                            HRP, GMV, and MVO (explained in detail in the next section). The tool will backtest all three
+                            HRP, CVaR, and MVO (explained in detail in the next section). The tool will backtest all three
                             using walk-forward analysis and show you which performed best historically.
                         </Typography>
 
@@ -301,25 +301,23 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                             </InfoBox>
                         </Paper>
 
-                        {/* GMV */}
+                        {/* CVaR */}
                         <Paper sx={{ p: 3, mb: 3, bgcolor: 'rgba(0, 212, 170, 0.1)', border: '1px solid rgba(0, 212, 170, 0.3)' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                 <ShieldIcon sx={{ color: '#00D4AA', fontSize: 28 }} />
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#00D4AA' }}>
-                                    GMV - Global Minimum Variance
+                                    CVaR - Conditional Value at Risk
                                 </Typography>
                             </Box>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>The Philosophy:</strong> "I don't know which assets will go up, but I can measure
-                                which combinations have the lowest volatility." GMV finds the portfolio with the absolute
-                                minimum variance possible.
+                                <strong>The Philosophy:</strong> "Rather than just minimizing overall volatility, I want to minimize the risk of catastrophic losses." CVaR finds the portfolio that minimizes the expected shortfall (the average of the worst X% of scenarios).
                             </Typography>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                                 <strong>Mathematical Formulation:</strong>
                             </Typography>
-                            <Formula>minimize   w'Σw   (portfolio variance)</Formula>
+                            <Formula>minimize   CVaR_α(w)   (Expected Shortfall)</Formula>
                             <Formula>subject to  Σwᵢ = 1   (weights sum to 100%)</Formula>
                             <Formula>            0 ≤ wᵢ ≤ max_weight   (weight constraints)</Formula>
 
@@ -328,23 +326,20 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2 }}>
                                 • <strong>w</strong> = vector of portfolio weights<br />
-                                • <strong>Σ</strong> = covariance matrix of asset returns<br />
-                                • <strong>w'Σw</strong> = portfolio variance
+                                • <strong>CVaR_α</strong> = the average loss exceeding the Value at Risk (VaR) at confidence level α<br />
+                                • <strong>α</strong> = confidence level (e.g., 95%)
                             </Typography>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2, mb: 1 }}>
                                 <strong>Key Insight:</strong>
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                GMV doesn't try to predict returns (which is very hard). It only uses the covariance matrix,
-                                which is more stable and easier to estimate. Research shows this often outperforms methods
-                                that try to forecast returns.
+                                Unlike variance, which penalizes both upside and downside deviations equally, CVaR focuses entirely on the left tail of the distribution (the worst-case scenarios). This makes it highly robust to non-normal distributions and fat tails.
                             </Typography>
 
                             <InfoBox type="success">
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    <strong>Best for:</strong> Conservative investors who prioritize capital preservation
-                                    and want the smoothest equity curve with minimal drawdowns.
+                                    <strong>Best for:</strong> Investors who are particularly sensitive to large drawdowns and want to optimize their portfolio specifically to survive market crashes.
                                 </Typography>
                             </InfoBox>
                         </Paper>
@@ -384,7 +379,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     <strong>Caution:</strong> MVO is very sensitive to return estimates. Small errors in
                                     expected returns can lead to wildly different allocations. We use Exponential Moving
                                     Average (EMA) of returns to stabilize predictions, but this method generally has
-                                    higher estimation error than GMV or HRP.
+                                    higher estimation error than CVaR or HRP.
                                 </Typography>
                             </InfoBox>
 

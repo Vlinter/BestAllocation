@@ -46,6 +46,7 @@ export interface OptimizationParams {
     benchmarkTicker: string;
     enableVolatilityScaling: boolean;
     targetVolatility: number;
+    cvar_confidence: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFullscreen = false }) => {
@@ -65,6 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     // Volatility Scaling (Quant Enhancement)
     const [enableVolatilityScaling, setEnableVolatilityScaling] = useState(false);
     const [targetVolatility, setTargetVolatility] = useState(12); // 12%
+    const [cvarConfidence, setCvarConfidence] = useState(95); // 95%
 
     // Automatically adjust maxWeight when tickers change
     useEffect(() => {
@@ -110,6 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
             benchmarkTicker,
             enableVolatilityScaling,
             targetVolatility: targetVolatility / 100,
+            cvar_confidence: cvarConfidence / 100,
         });
     };
 
@@ -155,7 +158,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         Compare All Methods
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        HRP, GMV, MVO run simultaneously
+                        HRP, CVaR, MVO run simultaneously
                     </Typography>
                 </Box>
             </Box>
@@ -539,7 +542,36 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                 )}
             </Box>
 
-            {/* CVaR Confidence Level Removed for GMV */}
+            <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <SpeedIcon color="primary" fontSize="small" />
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        CVAR CONFIDENCE
+                    </Typography>
+                </Box>
+                <Box sx={{ px: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                        Confidence Level: {cvarConfidence}%
+                    </Typography>
+                    <Slider
+                        value={cvarConfidence}
+                        onChange={(_, v) => setCvarConfidence(v as number)}
+                        min={80}
+                        max={99}
+                        step={1}
+                        marks={[
+                            { value: 80, label: '80%' },
+                            { value: 90, label: '90%' },
+                            { value: 95, label: '95%' },
+                            { value: 99, label: '99%' },
+                        ]}
+                        sx={{ mb: 1 }}
+                    />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Controls tail risk aversion (higher = more conservative)
+                    </Typography>
+                </Box>
+            </Box>
 
             {/* Error */}
             {error && <Alert severity="error">{error}</Alert>}

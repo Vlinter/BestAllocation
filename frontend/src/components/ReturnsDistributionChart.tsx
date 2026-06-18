@@ -25,7 +25,7 @@ const METHOD_COLORS: Record<string, { main: string; light: string; gradient: [st
         light: '#00FFD4',
         gradient: ['#00D4AA', '#00FFF0']
     },
-    gmv: {
+    cvar: {
         main: '#FFE66D',
         light: '#FFF094',
         gradient: ['#FFE66D', '#FFF9CC']

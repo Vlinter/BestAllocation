@@ -73,7 +73,7 @@ const WelcomeScreen: React.FC = () => {
             </Typography>
 
             <Typography variant="body1" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 500, mb: 4, lineHeight: 1.6 }}>
-                Configure your portfolio in the sidebar and click <Chip label="Compare All Methods" size="small" sx={{ bgcolor: 'rgba(124, 58, 237, 0.1)', color: '#A78BFA', fontWeight: 600, border: '1px solid rgba(124, 58, 237, 0.2)' }} /> to analyze HRP, GMV, and MVO strategies.
+                Configure your portfolio in the sidebar and click <Chip label="Compare All Methods" size="small" sx={{ bgcolor: 'rgba(124, 58, 237, 0.1)', color: '#A78BFA', fontWeight: 600, border: '1px solid rgba(124, 58, 237, 0.2)' }} /> to analyze HRP, CVaR, and MVO strategies.
             </Typography>
 
             {/* Feature Chips */}

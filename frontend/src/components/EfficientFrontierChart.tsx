@@ -23,7 +23,7 @@ interface EfficientFrontierChartProps {
 const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
     hrp: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.6)' },
     nco: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.6)' },
-    gmv: { color: '#FFE66D', glow: 'rgba(255, 230, 109, 0.6)' },
+    cvar: { color: '#FFE66D', glow: 'rgba(255, 230, 109, 0.6)' },
     mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.6)' },
 };
 
