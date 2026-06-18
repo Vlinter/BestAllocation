@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Box,
     TextField,
@@ -66,6 +66,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     const [enableVolatilityScaling, setEnableVolatilityScaling] = useState(false);
     const [targetVolatility, setTargetVolatility] = useState(12); // 12%
 
+    // Automatically adjust maxWeight when tickers change
+    useEffect(() => {
+        const n = tickers.length;
+        if (n > 0) {
+            const recommendedMax = Math.min(100, Math.ceil((100 / n) * 1.5 / 5) * 5);
+            setMaxWeight(recommendedMax);
+        }
+    }, [tickers.length]);
 
     // Custom toggle states
     const [isCustomTraining, setIsCustomTraining] = useState(false);

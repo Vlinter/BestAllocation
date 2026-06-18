@@ -22,22 +22,39 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
 
     // Transform data for the Bar Chart
     const chartData = useMemo(() => {
+        let hasCash = false;
         // 1. Collect all unique assets across all methods
         const allAssets = new Set<string>();
         methods.forEach(method => {
+            let totalWeight = 0;
             Object.keys(method.current_allocation.weights).forEach(asset => {
-                if (method.current_allocation.weights[asset] > 0.001) { // Filter tiny weights
+                const weight = method.current_allocation.weights[asset];
+                if (weight > 0.001) { // Filter tiny weights
                     allAssets.add(asset);
                 }
+                totalWeight += weight;
             });
+            if (totalWeight < 0.999) {
+                hasCash = true;
+            }
         });
+
+        if (hasCash) {
+            allAssets.add('CASH');
+        }
 
         // 2. Create data points for each asset
         const data = Array.from(allAssets).map(asset => {
             const point: any = { name: asset };
             methods.forEach(method => {
-                const weight = method.current_allocation.weights[asset] || 0;
-                point[method.method] = weight * 100; // Convert to percentage
+                if (asset === 'CASH') {
+                    const totalWeight = Object.values(method.current_allocation.weights).reduce((sum, w) => sum + w, 0);
+                    const cashWeight = Math.max(0, 1 - totalWeight);
+                    point[method.method] = cashWeight * 100; // Convert to percentage
+                } else {
+                    const weight = method.current_allocation.weights[asset] || 0;
+                    point[method.method] = weight * 100; // Convert to percentage
+                }
             });
             // Calculate max weight for sorting
             point.maxWeight = Math.max(...methods.map(m => point[m.method] || 0));
