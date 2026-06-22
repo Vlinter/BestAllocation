@@ -2,14 +2,14 @@ import numpy as np
 import pandas as pd
 import logging
 from typing import Dict, List, Tuple, Optional
-from pypfopt import expected_returns, risk_models, objective_functions
+from pypfopt import expected_returns, risk_models
 from pypfopt import EfficientFrontier, EfficientCVaR
 from pypfopt.exceptions import OptimizationError
 
 from .config import (
     TRADING_DAYS_PER_YEAR,
     COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY,
-    MVO_L2_GAMMA, MONTE_CARLO_SIMULATIONS
+    MONTE_CARLO_SIMULATIONS
 )
 
 # Configure module logger
@@ -342,8 +342,6 @@ def optimize_with_fallback(
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
 
              ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
-             # L2 regularization: penalizes weight concentration, improves out-of-sample stability
-             ef.add_objective(objective_functions.L2_reg, gamma=MVO_L2_GAMMA)
              try:
                  ef.max_sharpe(risk_free_rate=risk_free_rate)
                  return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
