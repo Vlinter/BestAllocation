@@ -6,26 +6,6 @@ from datetime import datetime as dt
 # Pydantic Models
 # ============================================================================
 
-class OptimizationRequest(BaseModel):
-    tickers: List[str] = Field(..., description="List of ticker symbols", min_length=2)
-    start_date: Optional[str] = Field(default=None, description="Start date (YYYY-MM-DD) or None for earliest")
-    end_date: Optional[str] = Field(default=None, description="End date (YYYY-MM-DD) or None for today")
-    method: Literal["hrp", "cvar", "mvo"] = Field(default="hrp")
-    training_window: int = Field(default=252, ge=60, le=1260)
-    rebalancing_window: int = Field(default=63, ge=5, le=126)
-    transaction_cost_bps: float = Field(default=10, ge=0, le=100, description="Transaction cost in basis points")
-
-    @field_validator('start_date', 'end_date', mode='before')
-    @classmethod
-    def validate_date_format(cls, v):
-        if v is not None:
-            try:
-                dt.strptime(v, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError(f"Invalid date format: '{v}'. Expected YYYY-MM-DD")
-        return v
-
-
 class PerformanceMetrics(BaseModel):
     sharpe_ratio: float
     sortino_ratio: float

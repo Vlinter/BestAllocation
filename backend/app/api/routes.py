@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import from new structure
 from ..core.schemas import (
-    OptimizationRequest, OptimizationResponse, PerformanceMetrics, 
+    OptimizationResponse, PerformanceMetrics, 
     CurrentAllocation, CompareRequest, CompareResponse, MethodResult, ModelParams
 )
 from ..core.config import TARGET_VOLATILITY, ENABLE_VOLATILITY_SCALING
