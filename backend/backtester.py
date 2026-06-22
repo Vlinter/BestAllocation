@@ -5,7 +5,7 @@ import logging
 from fastapi import HTTPException
 
 
-from .optimization import get_optimizer, optimize_with_fallback, OptimizationResult
+from .optimization import optimize_with_fallback, OptimizationResult
 from .config import (
     TRADING_DAYS_PER_YEAR, TURNOVER_SMOOTHING_FACTOR,
     TARGET_VOLATILITY, VOLATILITY_LOOKBACK, ENABLE_VOLATILITY_SCALING
@@ -197,7 +197,6 @@ def walk_forward_backtest(
     This eliminates the subtle look-ahead bias present in most backtests.
     """
     tickers = list(prices.columns)
-    optimizer = get_optimizer(method)
     
     # Ensure prices are numeric and handle NaNs
     prices_clean = prices.apply(pd.to_numeric, errors='coerce').ffill().dropna()

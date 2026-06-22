@@ -285,17 +285,6 @@ def optimize_hrp(returns: pd.DataFrame, min_weight: float = 0.0, max_weight: flo
 
 
 
-# ============================================================================
-# Optimizer Dispatch
-# ============================================================================
-
-def get_optimizer(method: str):
-    """Return the optimizer function for the given method."""
-    return {
-        "hrp": optimize_hrp,
-        "cvar": None,  # CVaR handled inline in optimize_with_fallback
-        "mvo": None,  # MVO handled inline in optimize_with_fallback
-    }.get(method, optimize_hrp)
 
 
 
@@ -353,6 +342,8 @@ def optimize_with_fallback(
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
 
              ef = EfficientFrontier(mu, S, weight_bounds=(min_weight, max_weight))
+             # L2 regularization: penalizes weight concentration, improves out-of-sample stability
+             ef.add_objective(objective_functions.L2_reg, gamma=MVO_L2_GAMMA)
              try:
                  ef.max_sharpe(risk_free_rate=risk_free_rate)
                  return OptimizationResult(weights=safe_clean_weights(ef.clean_weights()))
@@ -377,11 +368,12 @@ def optimize_with_fallback(
                 ec.min_cvar()
                 return OptimizationResult(weights=safe_clean_weights(ec.clean_weights()))
             except (ValueError, OptimizationError) as e:
-                logger.warning(f"CVaR solver failed ({e}). Defaulting to Equal Weight.")
+                logger.warning(f"CVaR solver failed ({e}). Defaulting to Cash.")
+                zero_weights = {col: 0.0 for col in returns.columns}
                 return OptimizationResult(
-                    weights=equal_weights,
+                    weights=zero_weights,
                     fallback_used=True,
-                    fallback_reason=f"CVaR Solver Failed: {e}"
+                    fallback_reason=f"CVaR Solver Failed: {e} -> Cash"
                 )
         
         else:
