@@ -253,50 +253,105 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                     </AccordionSummary>
                     <AccordionDetails>
 
+                        <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+                            This tool implements three distinct portfolio optimization strategies. Each one answers a different question
+                            about how to allocate your capital. Understanding how they work will help you interpret their results
+                            and choose the right one for your investment goals.
+                        </Typography>
+
                         {/* HRP */}
                         <Paper sx={{ p: 3, mb: 3, bgcolor: 'rgba(167, 139, 250, 0.1)', border: '1px solid rgba(167, 139, 250, 0.3)' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                 <AccountTreeIcon sx={{ color: '#A78BFA', fontSize: 28 }} />
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#A78BFA' }}>
-                                    HRP - Hierarchical Risk Parity
+                                    HRP — Hierarchical Risk Parity
                                 </Typography>
+                                <Chip label="Most Robust" size="small" sx={{ bgcolor: 'rgba(167, 139, 250, 0.3)', color: '#A78BFA', fontWeight: 600 }} />
                             </Box>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>The Innovation:</strong> Developed by Marcos López de Prado in 2016, HRP revolutionized
-                                portfolio optimization by using machine learning techniques (hierarchical clustering) to group
-                                similar assets together before allocating risk.
+                                <strong>Origin:</strong> Developed by Marcos López de Prado in 2016.
+                                This method uses machine learning (hierarchical clustering) to group
+                                similar assets together, then distributes risk intelligently across those groups.
                             </Typography>
 
-                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>How it Works:</strong>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>The question it answers:</strong> <em>"How can I spread risk intelligently across groups of similar assets?"</em>
                             </Typography>
+
+                            <Typography variant="subtitle2" sx={{ color: '#A78BFA', mt: 2, mb: 1 }}>
+                                How it works — Step by Step
+                            </Typography>
+
                             <List dense sx={{ mb: 2 }}>
                                 <ListItem><ListItemIcon><CategoryIcon sx={{ color: '#A78BFA' }} /></ListItemIcon>
-                                    <ListItemText primary="1. Correlation Analysis" secondary="Calculate correlations between all assets" sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }} />
+                                    <ListItemText
+                                        primary="Step 1 — Correlation Distance"
+                                        secondary="Calculate correlations between all assets, then convert them into a distance metric: d = √(0.5 × (1 − ρ)). Assets with high correlation (ρ close to 1) are 'close', uncorrelated assets are 'far apart'."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
                                 </ListItem>
                                 <ListItem><ListItemIcon><AccountTreeIcon sx={{ color: '#A78BFA' }} /></ListItemIcon>
-                                    <ListItemText primary="2. Hierarchical Clustering" secondary="Group similar assets into a tree structure" sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }} />
+                                    <ListItemText
+                                        primary="Step 2 — Hierarchical Clustering (Ward Linkage)"
+                                        secondary="Build a tree (dendrogram) by iteratively merging the two closest assets or clusters. This creates a hierarchy: e.g. AAPL and MSFT form a 'Tech' cluster, TLT and BND form a 'Bonds' cluster, then those clusters merge into the full portfolio."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
                                 </ListItem>
                                 <ListItem><ListItemIcon><SpeedIcon sx={{ color: '#A78BFA' }} /></ListItemIcon>
-                                    <ListItemText primary="3. Risk Allocation" secondary="Distribute risk through the tree, giving less to risky clusters" sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }} />
+                                    <ListItemText
+                                        primary="Step 3 — Quasi-Diagonalization"
+                                        secondary="Reorder the covariance matrix so that correlated assets sit next to each other. This makes the matrix nearly block-diagonal, which is key to the next step."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><SpeedIcon sx={{ color: '#A78BFA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 4 — Recursive Bisection"
+                                        secondary="Split the ordered list in half. Allocate risk to each half proportionally to its inverse variance (less risky half gets more weight). Repeat recursively until each asset has a weight."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
                                 </ListItem>
                             </List>
 
+                            <Typography variant="subtitle2" sx={{ color: '#A78BFA', mt: 2, mb: 1 }}>
+                                Key Mathematical Property
+                            </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                                <strong>Why it's Better:</strong>
+                                HRP never needs to invert the covariance matrix. Traditional methods (MVO) require matrix inversion,
+                                which amplifies estimation errors — small noise in the data leads to large changes in weights.
+                                HRP avoids this entirely, making it inherently more stable.
                             </Typography>
-                            <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2 }}>
-                                • <strong>No matrix inversion:</strong> Traditional methods need to invert the covariance matrix,
-                                which amplifies estimation errors. HRP avoids this entirely.<br />
-                                • <strong>Robust to noise:</strong> Works well even with short historical data.<br />
-                                • <strong>Intuitive:</strong> Groups similar assets naturally (tech stocks together, bonds together, etc.).
+
+                            <Typography variant="subtitle2" sx={{ color: '#A78BFA', mt: 2, mb: 1 }}>
+                                Advantages & Disadvantages
                             </Typography>
+                            <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#10B981', fontWeight: 600, mb: 0.5 }}>✅ Advantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • Most stable across market regimes<br />
+                                        • Works well even with short data history<br />
+                                        • No matrix inversion = robust to noise<br />
+                                        • Naturally diversified portfolio<br />
+                                        • Scales to many assets without issues
+                                    </Typography>
+                                </Paper>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#EF4444', fontWeight: 600, mb: 0.5 }}>❌ Disadvantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • Does not optimize any explicit objective<br />
+                                        • Ignores expected returns entirely<br />
+                                        • No guarantee of mathematical optimality<br />
+                                        • Cannot target a specific risk/return profile
+                                    </Typography>
+                                </Paper>
+                            </Box>
 
                             <InfoBox type="success">
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                                     <strong>Best for:</strong> Most investors. HRP typically delivers the most consistent
-                                    out-of-sample performance across different market conditions.
+                                    out-of-sample performance. It is the most "all-weather" strategy.
                                 </Typography>
                             </InfoBox>
                         </Paper>
@@ -306,89 +361,356 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                 <ShieldIcon sx={{ color: '#00D4AA', fontSize: 28 }} />
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#00D4AA' }}>
-                                    CVaR - Conditional Value at Risk
+                                    Min-CVaR — Minimum Conditional Value at Risk
                                 </Typography>
+                                <Chip label="Tail-Risk Focus" size="small" sx={{ bgcolor: 'rgba(0, 212, 170, 0.3)', color: '#00D4AA', fontWeight: 600 }} />
                             </Box>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>The Philosophy:</strong> "Rather than just minimizing overall volatility, I want to minimize the risk of catastrophic losses." CVaR finds the portfolio that minimizes the expected shortfall (the average of the worst X% of scenarios).
+                                <strong>Origin:</strong> Based on the work of Rockafellar & Uryasev (2000). CVaR (also called
+                                Expected Shortfall) is the standard risk measure used by financial regulators (Basel III/IV)
+                                and institutional risk managers worldwide.
                             </Typography>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>Mathematical Formulation:</strong>
+                                <strong>The question it answers:</strong> <em>"Which portfolio minimizes my average loss during the worst market days?"</em>
                             </Typography>
-                            <Formula>minimize   CVaR_α(w)   (Expected Shortfall)</Formula>
-                            <Formula>subject to  Σwᵢ = 1   (weights sum to 100%)</Formula>
-                            <Formula>            0 ≤ wᵢ ≤ max_weight   (weight constraints)</Formula>
 
-                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1, mt: 2 }}>
-                                <strong>Where:</strong>
+                            <Typography variant="subtitle2" sx={{ color: '#00D4AA', mt: 2, mb: 1 }}>
+                                Understanding VaR vs CVaR
+                            </Typography>
+
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>VaR (Value at Risk)</strong> answers: "What is the maximum I can lose with 95% confidence?"
+                                For example, a VaR₉₅ of -2% means: "On 95 days out of 100, I lose less than 2%."
+                                But VaR says nothing about what happens on the other 5 days — you could lose 3%, 10%, or 50%.
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                <strong>CVaR (Conditional VaR)</strong> answers: "When I do exceed that threshold, how bad is it on average?"
+                                It is the average loss across the worst 5% of days. CVaR is always ≥ VaR and captures the severity of extreme losses.
+                            </Typography>
+
+                            <Formula>VaR₉₅ = "I lose at most X on 95% of days"</Formula>
+                            <Formula>CVaR₉₅ = "On the 5% worst days, I lose Y on average"  (Y ≥ X)</Formula>
+
+                            <Typography variant="subtitle2" sx={{ color: '#00D4AA', mt: 3, mb: 1 }}>
+                                How the Optimization Works — Step by Step
+                            </Typography>
+
+                            <List dense sx={{ mb: 2 }}>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#00D4AA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 1 — Collect Historical Returns"
+                                        secondary="Take all daily returns from the training window (e.g. 252 days). Unlike MVO which condenses this into a covariance matrix, Min-CVaR uses every individual daily return."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#00D4AA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 2 — For each possible portfolio..."
+                                        secondary="Calculate what the portfolio return would have been on each of those 252 days. Sort the returns from worst to best."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#00D4AA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 3 — Isolate the tail"
+                                        secondary="At 95% confidence: take the 5% worst days (≈ 13 days out of 252). Calculate their average loss. This is the CVaR for that portfolio."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#00D4AA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 4 — Find the minimum"
+                                        secondary="Use a convex optimization solver to find the set of weights that makes this average tail loss as small as possible."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                            </List>
+
+                            <Typography variant="subtitle2" sx={{ color: '#00D4AA', mt: 2, mb: 1 }}>
+                                Mathematical Formulation (Rockafellar & Uryasev)
+                            </Typography>
+                            <Formula>minimize    ζ + (1 / αT) × Σ max(0, −rₜᵀw − ζ)</Formula>
+                            <Formula>subject to  Σwᵢ = 1,  0 ≤ wᵢ ≤ max_weight</Formula>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2, mt: 1 }}>
+                                • <strong>w</strong> = portfolio weights (what we're looking for)<br />
+                                • <strong>ζ (zeta)</strong> = auxiliary variable that converges to the VaR at the optimum<br />
+                                • <strong>rₜ</strong> = vector of asset returns on day t<br />
+                                • <strong>α</strong> = tail probability (e.g. 0.05 for 95% confidence)<br />
+                                • <strong>T</strong> = number of historical days<br />
+                                • <strong>max(0, ...)</strong> = only counts losses that exceed the threshold ζ
+                            </Typography>
+
+                            <InfoBox type="info">
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                    <strong>Key insight:</strong> This formulation transforms CVaR minimization into a linear program,
+                                    which is guaranteed to find the global optimum (no local minima). The trick is the auxiliary variable ζ
+                                    that simultaneously finds the optimal VaR threshold and the weights that minimize losses beyond it.
+                                </Typography>
+                            </InfoBox>
+
+                            <Typography variant="subtitle2" sx={{ color: '#00D4AA', mt: 2, mb: 1 }}>
+                                Why CVaR is a "Coherent" Risk Measure
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                Unlike VaR, CVaR satisfies four mathematical properties (Artzner et al., 1999) that make it reliable
+                                for portfolio optimization:
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2 }}>
-                                • <strong>w</strong> = vector of portfolio weights<br />
-                                • <strong>CVaR_α</strong> = the average loss exceeding the Value at Risk (VaR) at confidence level α<br />
-                                • <strong>α</strong> = confidence level (e.g., 95%)
+                                • <strong>Sub-additivity:</strong> Diversifying can only reduce or maintain risk, never increase it<br />
+                                • <strong>Monotonicity:</strong> If portfolio A always loses more than B, then A is riskier<br />
+                                • <strong>Positive Homogeneity:</strong> Doubling your position doubles your risk<br />
+                                • <strong>Translation Invariance:</strong> Adding cash reduces risk by exactly that amount
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+                                VaR violates sub-additivity: it is possible for two portfolios to have a higher combined VaR than
+                                the sum of their individual VaRs. This paradox makes VaR unsuitable for optimization.
                             </Typography>
 
-                            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2, mb: 1 }}>
-                                <strong>Key Insight:</strong>
+                            <Typography variant="subtitle2" sx={{ color: '#00D4AA', mt: 3, mb: 1 }}>
+                                Advantages & Disadvantages
                             </Typography>
-                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                Unlike variance, which penalizes both upside and downside deviations equally, CVaR focuses entirely on the left tail of the distribution (the worst-case scenarios). This makes it highly robust to non-normal distributions and fat tails.
-                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#10B981', fontWeight: 600, mb: 0.5 }}>✅ Advantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • Focuses on what investors fear most: extreme losses<br />
+                                        • No assumption about return distribution (works with fat tails)<br />
+                                        • Coherent risk measure (Basel III/IV standard)<br />
+                                        • Convex problem → guaranteed global optimum<br />
+                                        • Uses every data point, not just summary statistics
+                                    </Typography>
+                                </Paper>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#EF4444', fontWeight: 600, mb: 0.5 }}>❌ Disadvantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • Needs a lot of data (only uses 5% of observations for estimation)<br />
+                                        • Sensitive to training window size<br />
+                                        • Can produce concentrated portfolios if data is scarce<br />
+                                        • Slower to compute than HRP or MVO<br />
+                                        • Ignores expected returns (risk-only optimization)
+                                    </Typography>
+                                </Paper>
+                            </Box>
+
+                            <InfoBox type="warning">
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                    <strong>Data sensitivity:</strong> With a 252-day training window at 95% confidence,
+                                    Min-CVaR bases its decisions on only ~13 extreme days. With a 60-day window, that drops to
+                                    just 3 days. Use at least 252 days of training data for reliable results.
+                                </Typography>
+                            </InfoBox>
 
                             <InfoBox type="success">
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    <strong>Best for:</strong> Investors who are particularly sensitive to large drawdowns and want to optimize their portfolio specifically to survive market crashes.
+                                    <strong>Best for:</strong> Investors who are particularly sensitive to large drawdowns
+                                    and want a portfolio specifically designed to survive market crashes and black swan events.
                                 </Typography>
                             </InfoBox>
                         </Paper>
 
                         {/* MVO */}
-                        <Paper sx={{ p: 3, bgcolor: 'rgba(96, 165, 250, 0.1)', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
+                        <Paper sx={{ p: 3, mb: 3, bgcolor: 'rgba(96, 165, 250, 0.1)', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                 <ShowChartIcon sx={{ color: '#60A5FA', fontSize: 28 }} />
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: '#60A5FA' }}>
-                                    MVO - Mean-Variance Optimization (Max Sharpe)
+                                    MVO — Mean-Variance Optimization (Max Sharpe)
                                 </Typography>
+                                <Chip label="Return Focused" size="small" sx={{ bgcolor: 'rgba(96, 165, 250, 0.3)', color: '#60A5FA', fontWeight: 600 }} />
                             </Box>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>The Classic:</strong> Developed by Harry Markowitz in 1952 (Nobel Prize in Economics, 1990).
+                                <strong>Origin:</strong> Developed by Harry Markowitz in 1952 (Nobel Prize in Economics, 1990).
                                 This is the foundation of Modern Portfolio Theory. It finds the portfolio with the highest
-                                Sharpe ratio - the best risk-adjusted return.
+                                Sharpe ratio — the best return per unit of risk.
                             </Typography>
 
                             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-                                <strong>Mathematical Formulation:</strong>
+                                <strong>The question it answers:</strong> <em>"Which portfolio gives me the best return for the level of risk I'm taking?"</em>
                             </Typography>
-                            <Formula>maximize   (μ'w - rf) / √(w'Σw)   (Sharpe Ratio)</Formula>
-                            <Formula>subject to  Σwᵢ = 1</Formula>
 
-                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1, mt: 2 }}>
-                                <strong>Where:</strong>
+                            <Typography variant="subtitle2" sx={{ color: '#60A5FA', mt: 2, mb: 1 }}>
+                                How it works — Step by Step
+                            </Typography>
+
+                            <List dense sx={{ mb: 2 }}>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#60A5FA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 1 — Estimate Expected Returns (μ)"
+                                        secondary="Calculate the Exponential Moving Average (EMA) of historical returns. EMA gives more weight to recent data, making it more reactive than a simple average. Then apply James-Stein shrinkage to reduce extreme estimates towards the mean."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#60A5FA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 2 — Estimate Covariance Matrix (Σ)"
+                                        secondary="Calculate how assets move together. Apply Ledoit-Wolf shrinkage to stabilize the matrix — this blends the sample covariance with a structured estimator, reducing noise especially when the number of assets is large relative to the data."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#60A5FA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 3 — Risk-Free Rate Check"
+                                        secondary="If all assets have expected returns below the risk-free rate (T-Bill), the optimizer goes to 100% cash. This is the rational choice: why take risk if bonds pay more?"
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                                <ListItem><ListItemIcon><CheckIcon sx={{ color: '#60A5FA' }} /></ListItemIcon>
+                                    <ListItemText
+                                        primary="Step 4 — Maximize the Sharpe Ratio"
+                                        secondary="Solve the optimization: find the weights that maximize (portfolio return − risk-free rate) / portfolio volatility. This point is the tangency portfolio on the efficient frontier."
+                                        sx={{ '& .MuiListItemText-secondary': { color: 'text.secondary' } }}
+                                    />
+                                </ListItem>
+                            </List>
+
+                            <Typography variant="subtitle2" sx={{ color: '#60A5FA', mt: 2, mb: 1 }}>
+                                Mathematical Formulation
+                            </Typography>
+                            <Formula>maximize   (μᵀw − rf) / √(wᵀΣw)   (Sharpe Ratio)</Formula>
+                            <Formula>subject to  Σwᵢ = 1,  0 ≤ wᵢ ≤ max_weight</Formula>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2, mt: 1 }}>
+                                • <strong>μ</strong> = vector of expected returns (EMA + James-Stein shrinkage)<br />
+                                • <strong>rf</strong> = risk-free rate (3-Month US Treasury Bill, from FRED)<br />
+                                • <strong>Σ</strong> = covariance matrix (Ledoit-Wolf shrinkage)<br />
+                                • <strong>wᵀΣw</strong> = portfolio variance
+                            </Typography>
+
+                            <Typography variant="subtitle2" sx={{ color: '#60A5FA', mt: 3, mb: 1 }}>
+                                Our Regularization Techniques (Robustness)
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                                Raw MVO is notoriously unstable — it is often called a "maximum error maximizer" because it concentrates
+                                in the assets with the highest estimation error. We apply three layers of regularization:
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'text.secondary', pl: 2 }}>
-                                • <strong>μ</strong> = vector of expected returns<br />
-                                • <strong>rf</strong> = risk-free rate (T-Bill rate)<br />
-                                • <strong>√(w'Σw)</strong> = portfolio standard deviation
+                                • <strong>Ledoit-Wolf Shrinkage</strong> on the covariance matrix — stabilizes the risk estimates<br />
+                                • <strong>James-Stein Shrinkage</strong> on expected returns — pulls extreme return forecasts back to earth<br />
+                                • <strong>Weight Constraints</strong> (min/max per asset) — prevents extreme concentration
                             </Typography>
 
-                            <InfoBox type="warning">
+                            <Typography variant="subtitle2" sx={{ color: '#60A5FA', mt: 3, mb: 1 }}>
+                                Advantages & Disadvantages
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#10B981', fontWeight: 600, mb: 0.5 }}>✅ Advantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • The only method that explicitly maximizes returns<br />
+                                        • Nobel Prize-winning theoretical foundation<br />
+                                        • Integrates risk-free rate into the decision<br />
+                                        • Well-defined mathematical optimality<br />
+                                        • "Risk-off" mode when markets are unfavorable
+                                    </Typography>
+                                </Paper>
+                                <Paper sx={{ flex: 1, p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                    <Typography variant="body2" sx={{ color: '#EF4444', fontWeight: 600, mb: 0.5 }}>❌ Disadvantages</Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                                        • Very sensitive to expected return estimates<br />
+                                        • Assumes returns follow a Gaussian distribution<br />
+                                        • Can produce concentrated portfolios<br />
+                                        • Requires matrix inversion (amplifies errors)<br />
+                                        • May underperform out-of-sample due to overfitting
+                                    </Typography>
+                                </Paper>
+                            </Box>
+
+                            <InfoBox type="success">
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    <strong>Caution:</strong> MVO is very sensitive to return estimates. Small errors in
-                                    expected returns can lead to wildly different allocations. We use Exponential Moving
-                                    Average (EMA) of returns to stabilize predictions, but this method generally has
-                                    higher estimation error than CVaR or HRP.
+                                    <strong>Best for:</strong> Investors who believe past returns contain useful signals about
+                                    future performance and want the highest risk-adjusted return. Works best in stable, trending markets.
                                 </Typography>
                             </InfoBox>
-
-                            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>
-                                <strong>When it goes to Cash:</strong> If all assets have expected returns below the
-                                risk-free rate, MVO will allocate 100% to cash (T-Bills). This is mathematically correct
-                                but may not match your investment goals.
-                            </Typography>
                         </Paper>
+
+                        {/* COMPARISON TABLE */}
+                        <Paper sx={{ p: 3, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: '#fff', mb: 2 }}>
+                                📊 Side-by-Side Comparison
+                            </Typography>
+
+                            <Box sx={{ overflowX: 'auto' }}>
+                                <Box component="table" sx={{
+                                    width: '100%',
+                                    borderCollapse: 'collapse',
+                                    '& th, & td': {
+                                        p: 1.5,
+                                        fontSize: '0.8rem',
+                                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                                        color: 'text.secondary',
+                                        textAlign: 'left',
+                                    },
+                                    '& th': {
+                                        color: '#fff',
+                                        fontWeight: 600,
+                                        bgcolor: 'rgba(255,255,255,0.05)',
+                                    },
+                                }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Criterion</th>
+                                            <th style={{ color: '#A78BFA' }}>HRP</th>
+                                            <th style={{ color: '#00D4AA' }}>Min-CVaR</th>
+                                            <th style={{ color: '#60A5FA' }}>MVO</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Objective</strong></td>
+                                            <td>Allocate risk equally across clusters</td>
+                                            <td>Minimize average loss in worst scenarios</td>
+                                            <td>Maximize return per unit of risk</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Uses Expected Returns?</strong></td>
+                                            <td>❌ No</td>
+                                            <td>❌ No (risk-only)</td>
+                                            <td>✅ Yes (central to the method)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Risk Measure</strong></td>
+                                            <td>Variance (per cluster)</td>
+                                            <td>CVaR (tail risk)</td>
+                                            <td>Variance (total portfolio)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Distributional Assumption</strong></td>
+                                            <td>None</td>
+                                            <td>None (works with fat tails)</td>
+                                            <td>Gaussian (Normal)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Stability</strong></td>
+                                            <td>⭐⭐⭐ Very High</td>
+                                            <td>⭐⭐ Moderate</td>
+                                            <td>⭐ Low (without regularization)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Data Requirement</strong></td>
+                                            <td>Low (works with 60+ days)</td>
+                                            <td>High (needs 252+ days for 95% conf.)</td>
+                                            <td>Moderate (126+ days)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Solver Type</strong></td>
+                                            <td>No solver (heuristic)</td>
+                                            <td>Linear programming</td>
+                                            <td>Quadratic programming</td>
+                                        </tr>
+                                    </tbody>
+                                </Box>
+                            </Box>
+
+                            <InfoBox type="info">
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                    <strong>Tip:</strong> Compare all three methods on the same data.
+                                    If they agree on a similar allocation, that's a strong signal.
+                                    If they diverge significantly, the data may be too noisy for confident decisions.
+                                </Typography>
+                            </InfoBox>
+                        </Paper>
+
                     </AccordionDetails>
                 </Accordion>
 
@@ -763,12 +1085,42 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     Markowitz, H. (1952)
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
-                                    "Portfolio Selection" - The Journal of Finance, 7(1), 77-91
+                                    "Portfolio Selection" — The Journal of Finance, 7(1), 77-91
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
                                     The foundational paper of Modern Portfolio Theory. Introduced the concept of
                                     mean-variance optimization and the efficient frontier. Markowitz received the
-                                    Nobel Prize in Economics in 1990 for this work.
+                                    Nobel Prize in Economics in 1990 for this work. Our MVO (Max Sharpe) method
+                                    is a direct implementation of this framework.
+                                </Typography>
+                            </Paper>
+
+                            <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#fff' }}>
+                                    Artzner, P., Delbaen, F., Eber, J.-M. & Heath, D. (1999)
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
+                                    "Coherent Measures of Risk" — Mathematical Finance, 9(3), 203-228
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+                                    Defined the four axioms of coherent risk measures (sub-additivity, monotonicity,
+                                    positive homogeneity, translation invariance) and showed that VaR is not coherent.
+                                    This paper is the theoretical foundation for why CVaR is superior to VaR for
+                                    portfolio optimization.
+                                </Typography>
+                            </Paper>
+
+                            <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#fff' }}>
+                                    Rockafellar, R. T. & Uryasev, S. (2000)
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
+                                    "Optimization of Conditional Value-at-Risk" — Journal of Risk, 2(3), 21-41
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+                                    Showed that CVaR minimization can be reformulated as a linear program using an
+                                    auxiliary variable (ζ), making it computationally tractable. This is the exact
+                                    algorithm used by our Min-CVaR implementation via PyPortfolioOpt.
                                 </Typography>
                             </Paper>
 
@@ -777,37 +1129,29 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                                     López de Prado, M. (2016)
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
-                                    "Building Diversified Portfolios that Outperform Out-of-Sample" -
+                                    "Building Diversified Portfolios that Outperform Out-of-Sample" —
                                     The Journal of Portfolio Management, 42(4), 59-69
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
                                     Introduced the Hierarchical Risk Parity (HRP) method. Demonstrated that
                                     machine learning-based clustering produces more stable allocations than
-                                    traditional quadratic optimization.
+                                    traditional quadratic optimization, with superior out-of-sample performance.
                                 </Typography>
                             </Paper>
 
                             <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#fff' }}>
-                                    Choueifaty, Y. & Coignard, Y. (2008)
+                                    Ledoit, O. & Wolf, M. (2004)
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
-                                    "Toward Maximum Diversification" - The Journal of Portfolio Management, 35(1), 40-51
+                                    "A well-conditioned estimator for large-dimensional covariance matrices" —
+                                    Journal of Multivariate Analysis, 88(2), 365-411
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                                    Introduced the Maximum Diversification approach and the Diversification Ratio metric.
-                                </Typography>
-                            </Paper>
-
-                            <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#fff' }}>
-                                    Clarke, R., de Silva, H., & Thorley, S. (2011)
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: '#A78BFA', fontStyle: 'italic' }}>
-                                    "Minimum-Variance Portfolio Composition" - The Journal of Portfolio Management
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                                    Comprehensive analysis of minimum variance portfolios and their out-of-sample performance.
+                                    Introduced the shrinkage estimator for covariance matrices used in our MVO
+                                    implementation. Blends the sample covariance with a structured target to reduce
+                                    estimation error, especially when the number of assets is large relative to the
+                                    number of observations.
                                 </Typography>
                             </Paper>
                         </Box>
