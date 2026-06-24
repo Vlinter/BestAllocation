@@ -67,11 +67,11 @@ const metricsConfig: MetricConfig[] = [
     },
     {
         label: 'Omega Ratio', key: 'omega_ratio', format: (v) => v.toFixed(2), higherIsBetter: true,
-        tooltip: 'Probability-weighted gains / losses. >1 means gains outweigh losses. Captures full return distribution.'
+        tooltip: 'Ratio of cumulative gains above the risk-free rate to cumulative losses below it. >1 means gains outweigh losses. Unlike Sharpe, it captures the entire return distribution (skewness, kurtosis).'
     },
     {
         label: 'Win Rate', key: 'win_rate', format: (v) => `${(v * 100).toFixed(1)}%`, higherIsBetter: true,
-        tooltip: 'Percentage of days with positive returns. 50%+ is typical for trending strategies.'
+        tooltip: 'Percentage of rebalancing periods with positive returns. 50%+ is typical. A high win rate with low average gains can still underperform a low win rate with large average gains.'
     },
     {
         label: 'Annualized Turnover', key: 'annualized_turnover', format: (v) => `${(v * 100).toFixed(0)}%`, higherIsBetter: false,
