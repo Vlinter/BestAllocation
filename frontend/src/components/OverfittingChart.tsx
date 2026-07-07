@@ -17,6 +17,7 @@ interface OverfittingMetric {
     date: string;
     predicted_sharpe: number;
     realized_sharpe: number;
+    is_cash?: boolean;
 }
 
 interface Dataset {
@@ -29,40 +30,60 @@ interface OverfittingChartProps {
     datasets: Dataset[];
 }
 
-// Calculate Spearman Rank Correlation
-const calculateSpearmanCorrelation = (data: OverfittingMetric[]): number => {
-    if (data.length < 3) return 0;
+// Cash periods are recorded as degenerate (0, 0) placeholder pairs by the
+// backend. Including them would pile identical, perfectly-"predicted" points
+// into the statistics and artificially inflate the correlation — exclude them
+// from all predictive-power calculations (they are still drawn, greyed out).
+const activePoints = (data: OverfittingMetric[]): OverfittingMetric[] =>
+    data.filter(d => !d.is_cash);
 
-    const n = data.length;
-    const x = data.map(d => d.predicted_sharpe);
-    const y = data.map(d => d.realized_sharpe);
-
-    const getRanks = (arr: number[]): number[] => {
-        const sorted = [...arr].map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
-        const ranks = new Array(arr.length);
-        sorted.forEach((item, rank) => { ranks[item.i] = rank + 1; });
-        return ranks;
-    };
-
-    const rankX = getRanks(x);
-    const rankY = getRanks(y);
-
-    let sumD2 = 0;
-    for (let i = 0; i < n; i++) {
-        sumD2 += Math.pow(rankX[i] - rankY[i], 2);
+// Average ranks for ties (the classic 6Σd²/n(n²-1) shortcut is only valid
+// without ties; capped Sharpes and repeated values make ties common here).
+const getRanksWithTies = (arr: number[]): number[] => {
+    const indexed = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+    const ranks = new Array<number>(arr.length);
+    let pos = 0;
+    while (pos < indexed.length) {
+        let end = pos;
+        while (end + 1 < indexed.length && indexed[end + 1].v === indexed[pos].v) end++;
+        const avgRank = (pos + end) / 2 + 1; // ranks are 1-based
+        for (let k = pos; k <= end; k++) ranks[indexed[k].i] = avgRank;
+        pos = end + 1;
     }
-
-    const rho = 1 - (6 * sumD2) / (n * (n * n - 1));
-    return rho;
+    return ranks;
 };
 
-// Calculate linear regression
-const calculateRegression = (data: OverfittingMetric[]): { slope: number; intercept: number } => {
-    if (data.length < 2) return { slope: 1, intercept: 0 };
+// Spearman = Pearson correlation of the (tie-averaged) ranks
+const calculateSpearmanCorrelation = (data: OverfittingMetric[]): number => {
+    const pts = activePoints(data);
+    if (pts.length < 3) return 0;
 
-    const n = data.length;
-    const x = data.map(d => d.predicted_sharpe);
-    const y = data.map(d => d.realized_sharpe);
+    const rankX = getRanksWithTies(pts.map(d => d.predicted_sharpe));
+    const rankY = getRanksWithTies(pts.map(d => d.realized_sharpe));
+
+    const n = pts.length;
+    const meanX = rankX.reduce((a, b) => a + b, 0) / n;
+    const meanY = rankY.reduce((a, b) => a + b, 0) / n;
+    let num = 0, denX = 0, denY = 0;
+    for (let i = 0; i < n; i++) {
+        const dx = rankX[i] - meanX;
+        const dy = rankY[i] - meanY;
+        num += dx * dy;
+        denX += dx * dx;
+        denY += dy * dy;
+    }
+    if (denX <= 0 || denY <= 0) return 0;
+    return num / Math.sqrt(denX * denY);
+};
+
+// Calculate linear regression (cash periods excluded — see activePoints)
+const calculateRegression = (data: OverfittingMetric[]): { slope: number; intercept: number } => {
+    const pts = activePoints(data);
+    if (pts.length < 2) return { slope: 1, intercept: 0 };
+
+    const n = pts.length;
+    const x = pts.map(d => d.predicted_sharpe);
+    const y = pts.map(d => d.realized_sharpe);
 
     const sumX = x.reduce((a, b) => a + b, 0);
     const sumY = y.reduce((a, b) => a + b, 0);
@@ -123,13 +144,17 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
         : datasets;
 
     const totalPoints = datasets.reduce((acc, ds) => acc + (ds.data?.length || 0), 0);
+    const totalCashPoints = datasets.reduce(
+        (acc, ds) => acc + (ds.data?.filter(d => d.is_cash).length || 0), 0
+    );
 
-    // Calculate stats for each dataset
+    // Calculate stats for each dataset (cash periods excluded from statistics)
     const datasetStats = useMemo(() => {
         return datasets.map(ds => {
             const spearman = calculateSpearmanCorrelation(ds.data || []);
             const regression = calculateRegression(ds.data || []);
             const interpretation = getInterpretation(spearman);
+            const cashCount = ds.data?.filter(d => d.is_cash).length || 0;
             return {
                 name: ds.name,
                 shortName: ds.name.split(' ')[0], // HRP, Min, Mean-Variance
@@ -137,7 +162,8 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
                 regression,
                 color: ds.color,
                 interpretation,
-                dataCount: ds.data?.length || 0
+                dataCount: (ds.data?.length || 0) - cashCount,
+                cashCount
             };
         });
     }, [datasets]);
@@ -176,7 +202,8 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
                         </MuiTooltip>
                     </Box>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Predicted vs Realized Sharpe Ratio • {totalPoints} data points
+                        Predicted vs Realized Sharpe Ratio • {totalPoints - totalCashPoints} data points
+                        {totalCashPoints > 0 && ` (${totalCashPoints} cash periods excluded from stats)`}
                     </Typography>
                 </Box>
 
@@ -378,16 +405,30 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
                             );
                         })}
 
-                        {/* Scatter points */}
+                        {/* Scatter points — cash periods drawn greyed-out, excluded from stats */}
                         {filteredDatasets.map((dataset) => (
                             <Scatter
                                 key={dataset.name}
                                 name={dataset.name}
-                                data={dataset.data}
+                                data={(dataset.data || []).filter(d => !d.is_cash)}
                                 fill={dataset.color}
                                 fillOpacity={0.7}
                             />
                         ))}
+                        {filteredDatasets.map((dataset) => {
+                            const cashPts = (dataset.data || []).filter(d => d.is_cash);
+                            if (!cashPts.length) return null;
+                            return (
+                                <Scatter
+                                    key={`${dataset.name}-cash`}
+                                    name={`${dataset.name} (cash)`}
+                                    data={cashPts}
+                                    fill="#6B7280"
+                                    fillOpacity={0.35}
+                                    legendType="none"
+                                />
+                            );
+                        })}
                     </ScatterChart>
                 </ResponsiveContainer>
             </Box>
@@ -410,8 +451,9 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
                         🎯 Metrics Explained
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.6, display: 'block' }}>
-                        • <strong>Rank IC (ρ)</strong>: Spearman correlation. ρ &gt; 0.3 = robust, ρ ≈ 0 = random noise<br />
-                        • <strong>Reg. Slope</strong>: How much realized Sharpe changes per unit predicted. Slope &lt; 0.5 = decay
+                        • <strong>Rank IC (ρ)</strong>: Spearman correlation (tie-adjusted). ρ ≥ 0.5 = robust, 0.3-0.5 = moderate, ρ ≈ 0 = random noise<br />
+                        • <strong>Reg. Slope</strong>: How much realized Sharpe changes per unit predicted. Slope &lt; 0.5 = decay<br />
+                        • <strong>Note</strong>: this is a heuristic in-house diagnostic (rank IC), not a formal PBO/Deflated-Sharpe test. With few rebalances the ρ is noisy — check the point count. Grey points = cash periods (excluded).
                     </Typography>
                 </Box>
             </Box>

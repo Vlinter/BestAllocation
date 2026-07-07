@@ -24,12 +24,14 @@ app = FastAPI(
     version="2.4.0"
 )
 
-# CORS Configuration — use ALLOWED_ORIGINS env var in production
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+# CORS Configuration — set ALLOWED_ORIGINS to your exact domain(s) in production.
+# allow_credentials stays False: the API is stateless (no cookies/auth), and
+# wildcard origins combined with credentials is forbidden by the CORS spec.
+allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -42,11 +44,25 @@ RATE_LIMIT_WINDOW = 60    # per 60 seconds
 RATE_LIMIT_MAX_IPS = 1000 # max tracked IPs to prevent memory leak
 _rate_limit_store: dict = defaultdict(list)
 
+def _client_ip(request: Request) -> str:
+    """
+    Resolve the real client IP. Behind a reverse proxy (Render, nginx...) the
+    socket peer is the proxy, so every user would share one rate-limit bucket.
+    X-Forwarded-For's first entry is the original client.
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else "unknown"
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     """Rate limit /api/compare/start to prevent abuse."""
     if request.url.path == "/api/compare/start" and request.method == "POST":
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = _client_ip(request)
         now = time.time()
         # Clean old entries for this IP
         _rate_limit_store[client_ip] = [

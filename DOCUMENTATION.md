@@ -67,24 +67,39 @@ w_droite *= (1 - α)
 
 ---
 
-### 2. CVaR (Conditional Value at Risk)
+### 2. Min-CVaR (Conditional Value at Risk)
 
-**Principe:** Minimise la variance totale du portefeuille sans considérer les rendements.
+**Source:** Rockafellar, R.T. & Uryasev, S. (2000) - "Optimization of Conditional Value-at-Risk"
 
-**Formule:**
+**Principe:** Minimise la **CVaR** (Expected Shortfall) du portefeuille : la perte moyenne
+subie sur les pires (1−β)% des jours (β = niveau de confiance, 95% par défaut,
+réglable dans l'UI). C'est une optimisation du **risque de queue**, plus fine que la
+variance car elle capture l'asymétrie des rendements.
+
+**Formule (programme linéaire de Rockafellar-Uryasev):**
 ```
-min   w'Σw
+min   ζ + 1/((1-β)T) × Σ max(-w'rₜ - ζ, 0)
 s.t.  Σw = 1
       min_weight ≤ w ≤ max_weight
 ```
 
 Où:
-- `w` = vecteur des poids
-- `Σ` = matrice de covariance (shrinkage Ledoit-Wolf)
+- `w` = vecteur des poids, `rₜ` = rendements du jour t (données historiques brutes)
+- `ζ` = la VaR au niveau β (variable d'optimisation auxiliaire)
+- `β` = niveau de confiance (0.95 par défaut)
 
-**Implémentation:** Utilise PyPortfolioOpt avec covariance shrinkée.
+**Implémentation:** `EfficientCVaR(mu, returns, beta=β).min_cvar()` de PyPortfolioOpt
+(solveur convexe CVXPY). Contrairement au MVO, l'optimiseur travaille directement sur
+les rendements historiques journaliers — pas sur une matrice de covariance.
 
-**Avantages:** Robuste car n'utilise pas les estimations de rendements (souvent peu fiables).
+**Avantages:** CVaR est une mesure de risque **cohérente** (Artzner et al., 1999),
+contrairement à la VaR. N'utilise pas les estimations de rendements attendus.
+
+> [!WARNING]
+> À 95% sur une fenêtre de 252 jours, la CVaR n'est estimée que sur ~13 jours extrêmes.
+> L'estimation de queue est donc sensible aux outliers : l'allocation peut bouger
+> sensiblement quand un jour extrême entre ou sort de la fenêtre glissante.
+> Utiliser une fenêtre d'entraînement ≥ 252 jours.
 
 ---
 
@@ -138,15 +153,22 @@ Le span est dynamiquement ajusté à la taille de la fenêtre d'entraînement (e
 
 **Problème:** Les estimations des rendements moyens par actif sont extrêmement bruitées. L'estimateur de Stein prouve qu'on peut toujours réduire l'erreur quadratique moyenne en "shrinkant" vers une cible commune.
 
-**Solution:** Shrinkage vers la moyenne globale (grand mean) :
+**Solution:** Shrinkage vers la moyenne globale (grand mean), à intensité **fixe** :
 
 ```
 μ_shrunk = λ × μ_grand_mean + (1-λ) × μ_sample
 
 où:
 - μ_grand_mean = moyenne de tous les rendements attendus
-- λ = RETURN_SHRINKAGE_INTENSITY = 0.5 (paramètre configurable)
+- λ = RETURN_SHRINKAGE_INTENSITY = 0.5 (constante, config.py)
 ```
+
+> [!NOTE]
+> Pourquoi λ fixe et pas l'intensité data-driven de James-Stein ? La formule
+> data-driven exige la variance d'échantillonnage des moyennes ; sur ~1 an de
+> données quotidiennes, ce bruit domine tellement la dispersion transversale des
+> rendements attendus que λ tendrait vers 1 (tout le signal serait jeté).
+> λ = 0.5 garde la moitié du signal tout en réduisant nettement l'erreur d'estimation.
 
 **Effet:**
 | λ | Comportement |
@@ -392,10 +414,14 @@ Calmar = CAGR / Max_Drawdown
 
 ### Alpha (Jensen's Alpha)
 
-**Formule:**
+**Formule:** estimée par régression sur les rendements quotidiens arithmétiques
+(l'intercept OLS annualisé) :
 ```
-Alpha = CAGR_portfolio - (rf + β × (CAGR_benchmark - rf))
+Alpha = [mean(r_p - rf_d) - β × mean(r_b - rf_d)] × 252
 ```
+Utiliser des rendements arithmétiques (et non des CAGR composés) garde l'alpha
+cohérent avec le beta estimé en quotidien — injecter des CAGR dans la droite du
+CAPM gonflerait l'alpha d'environ σ²/2 (variance drag).
 
 **Interprétation:** Le rendement EXCÉDENTAIRE par rapport à ce que prédit le CAPM.
 - Alpha > 0: On a battu le marché ajusté du risque
@@ -448,10 +474,11 @@ Turnover_annual = Σ(Turnover_events) / years
 | Paramètre | Description | Défaut |
 |-----------|-------------|--------|
 | Training Window | Jours de données pour l'optimisation | 252 |
-| Rebalancing Window | Jours entre chaque rebalancement | 21 |
+| Rebalancing Window | Jours entre chaque rebalancement | 63 (trimestriel) |
 | Min Weight | Poids minimum par actif | 0% |
-| Max Weight | Poids maximum par actif | 100% |
-| Transaction Cost | Coût en bps par trade | 10 |
+| Max Weight | Poids maximum par actif | 100% (UI : 25%) |
+| Transaction Cost | Coût en bps par trade (par jambe) | 10 |
+| CVaR Confidence | Niveau de confiance β du Min-CVaR | 95% |
 
 ---
 
@@ -484,13 +511,16 @@ d_ij = √(0.5 × (1 - ρ_ij))
 
 ```
 backend/
-├── main.py           # API FastAPI, endpoints
-├── optimization.py   # HRP, CVaR, MVO algorithms
-├── backtester.py     # Walk-forward engine
-├── metrics.py        # Performance calculations
-├── config.py         # Constants
-├── schemas.py        # Pydantic models
-└── data_provider.py  # Data fetching (yfinance)
+├── main.py                # Entrée FastAPI, CORS, rate limiting
+├── app/
+│   ├── api/routes.py      # Endpoints, orchestration des jobs
+│   ├── core/schemas.py    # Modèles Pydantic (source unique des défauts API)
+│   └── services/jobs.py   # Job manager asynchrone en mémoire
+├── optimization.py        # Algorithmes HRP, Min-CVaR, MVO
+├── backtester.py          # Moteur walk-forward + benchmarks
+├── metrics.py             # Métriques, stress tests, rolling Sharpe
+├── config.py              # Constantes
+└── data_provider.py       # Données (Tiingo + FRED, cache joblib)
 
 frontend/
 ├── App.tsx           # Main application
@@ -523,11 +553,15 @@ frontend/
 
 ## ⚠️ Limitations
 
-1. **Pas de slippage:** On assume une exécution au prix de clôture
+1. **Pas de slippage:** Exécution exactement au prix d'ouverture de T+1 (pas d'écart d'exécution modélisé)
 2. **Pas de market impact:** Valable pour des portefeuilles de taille modeste
-3. **Données historiques:** Les performances passées ne garantissent pas l'avenir
-4. **Estimation des rendements (MVO):** Bien que mitigée par EMA et James-Stein shrinkage, reste une source d'incertitude inhérente à toute prévision
-5. **Corrélations non-stationnaires:** Les corrélations entre actifs changent dans le temps, surtout en période de crise
+3. **Actions fractionnaires:** Les quantités sont continues (hypothèse de divisibilité parfaite — réaliste pour ETF/fonds, pas pour un titre à très gros nominal)
+4. **Données historiques:** Les performances passées ne garantissent pas l'avenir
+5. **Estimation des rendements (MVO):** Bien que mitigée par EMA et James-Stein shrinkage, reste une source d'incertitude inhérente à toute prévision
+6. **CVaR à petit échantillon:** ~13 observations de queue à 95%/252 jours — estimation instable (voir la section Min-CVaR)
+7. **Corrélations non-stationnaires:** Les corrélations entre actifs changent dans le temps, surtout en période de crise
+8. **Biais de survivance:** Seuls les tickers existants aujourd'hui sont testables
+9. **Diagnostic d'overfitting heuristique:** rank-IC de Spearman prédit/réalisé (périodes cash exclues) — ce n'est ni le PBO/CSCV de Bailey & López de Prado, ni le Deflated Sharpe Ratio
 
 ---
 
@@ -536,6 +570,8 @@ frontend/
 - López de Prado, M. (2018). *Advances in Financial Machine Learning*
 - Markowitz, H. (1952). *Portfolio Selection*
 - Sharpe, W. (1966). *Mutual Fund Performance*
+- Rockafellar, R.T., & Uryasev, S. (2000). *Optimization of Conditional Value-at-Risk*
+- Artzner, P., Delbaen, F., Eber, J.-M., & Heath, D. (1999). *Coherent Measures of Risk*
 - Ledoit, O., & Wolf, M. (2004). *Honey, I Shrunk the Sample Covariance Matrix*
 - James, W., & Stein, C. (1961). *Estimation with Quadratic Loss* (Shrinkage Estimators)
 - PyPortfolioOpt Documentation: https://pyportfolioopt.readthedocs.io/

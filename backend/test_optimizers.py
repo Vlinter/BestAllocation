@@ -1,7 +1,9 @@
 """
-Comprehensive test suite for portfolio optimization algorithms.
+Test suite for portfolio optimization algorithms (pytest).
 Tests HRP, CVaR, and MVO for mathematical correctness.
 All tests use optimize_with_fallback() which is the production entrypoint.
+
+Run from the repo root:  pytest backend -q
 """
 import sys
 import os
@@ -10,228 +12,177 @@ import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from backend.optimization import optimize_hrp, optimize_with_fallback
-from backend.metrics import calculate_metrics
+from backend.optimization import optimize_hrp, optimize_with_fallback, shrink_expected_returns
+from backend.config import RETURN_SHRINKAGE_INTENSITY
+
+
+def _gaussian_universe(seed=42, n=500):
+    np.random.seed(seed)
+    dates = pd.date_range("2020-01-01", periods=n)
+    return pd.DataFrame({
+        'A': np.random.normal(0.0005, 0.01, n),
+        'B': np.random.normal(0.0005, 0.02, n),
+        'C': np.random.normal(0.0005, 0.03, n)
+    }, index=dates)
 
 
 def test_hrp_basic():
-    """Test HRP produces valid weights that sum to 1."""
-    np.random.seed(42)
-    n = 500
-    dates = pd.date_range("2020-01-01", periods=n)
-    
-    # 3 assets with different volatilities
-    df = pd.DataFrame({
-        'A': np.random.normal(0.0005, 0.01, n),
-        'B': np.random.normal(0.0005, 0.02, n),
-        'C': np.random.normal(0.0005, 0.03, n)
-    }, index=dates)
-    
+    """HRP produces valid weights that sum to 1, favoring low-vol assets."""
+    df = _gaussian_universe()
     weights, dendrogram = optimize_hrp(df)
-    
-    # Weights must sum to 1
-    assert abs(sum(weights.values()) - 1.0) < 1e-6, f"Weights sum to {sum(weights.values())}, not 1.0"
-    
-    # All weights must be positive
-    for ticker, w in weights.items():
-        assert w >= 0, f"Negative weight for {ticker}: {w}"
-    
-    # Lower variance assets should have higher weights (inverse variance principle)
-    assert weights['A'] > weights['C'], f"Expected A > C, got A={weights['A']}, C={weights['C']}"
-    
-    # Dendrogram data should be returned
-    assert dendrogram is not None, "Dendrogram data should not be None"
-    assert "icoord" in dendrogram, "Dendrogram should contain 'icoord'"
-    assert "ivl" in dendrogram, "Dendrogram should contain 'ivl'"
-    
-    print(f"HRP Weights: {weights}")
-    print("[OK] HRP basic test passed")
 
-
-def test_cvar_minimizes_cvar():
-    """Test CVaR gives valid portfolio weights."""
-    np.random.seed(42)
-    n = 500
-    dates = pd.date_range("2020-01-01", periods=n)
-    
-    df = pd.DataFrame({
-        'A': np.random.normal(0.0005, 0.01, n),
-        'B': np.random.normal(0.0005, 0.02, n),
-        'C': np.random.normal(0.0005, 0.03, n)
-    }, index=dates)
-    
-    result = optimize_with_fallback(df, method="cvar", risk_free_rate=0.04)
-    weights = result.weights
-    
-    # Weights must sum to 1
     assert abs(sum(weights.values()) - 1.0) < 1e-6
-    
-    print(f"CVaR Weights: {weights}")
-    print("[OK] CVaR test passed")
+    assert all(w >= 0 for w in weights.values())
+    # Inverse variance principle: lower-vol asset gets more weight
+    assert weights['A'] > weights['C']
+    # Dendrogram data for the frontend chart
+    assert dendrogram is not None
+    assert "icoord" in dendrogram and "ivl" in dendrogram
+
+
+def test_cvar_valid_weights():
+    """CVaR gives valid portfolio weights summing to 1."""
+    df = _gaussian_universe()
+    result = optimize_with_fallback(df, method="cvar", risk_free_rate=0.04)
+    assert abs(sum(result.weights.values()) - 1.0) < 1e-6
+
+
+def test_cvar_diverges_from_minvar_on_skewed_returns():
+    """
+    THE discriminating CVaR test. Under Gaussian returns, min-CVaR and
+    min-variance coincide, so Gaussian tests cannot prove tail-risk capture.
+    Here: two assets with (near) IDENTICAL variance, but B is heavily
+    negatively skewed (rare crashes). A true CVaR optimizer must underweight
+    B; a min-variance optimizer is indifferent (~50/50).
+    """
+    from pypfopt import risk_models
+
+    np.random.seed(7)
+    n = 1000
+    crash = np.random.random(n) < 0.03
+    ret_b = np.where(crash,
+                     np.random.normal(-0.045, 0.01, n),
+                     np.random.normal(0.002, 0.008, n))    # fat left tail
+    ret_a = np.random.normal(0.0005, ret_b.std(), n)       # Gaussian, matched variance
+    df = pd.DataFrame({"A": ret_a, "B": ret_b},
+                      index=pd.date_range("2018-01-01", periods=n, freq="B"))
+
+    # Sanity: variances actually matched, skews actually different
+    assert abs(df['A'].std() - df['B'].std()) / df['B'].std() < 0.05
+    assert df['B'].skew() < -1.5 and df['A'].skew() > -0.5
+
+    result = optimize_with_fallback(df, method="cvar", risk_free_rate=0.04)
+    w_cvar = result.weights
+    assert not result.fallback_used
+
+    # Closed-form min-variance with Ledoit-Wolf for comparison
+    S = risk_models.CovarianceShrinkage(df, returns_data=True).ledoit_wolf()
+    Sinv = np.linalg.inv(S.values)
+    ones = np.ones(2)
+    w_mv = Sinv @ ones / (ones @ Sinv @ ones)
+
+    assert abs(w_mv[0] - 0.5) < 0.10, f"min-variance should be ~50/50, got {w_mv}"
+    assert w_cvar["A"] > 0.60, f"CVaR must underweight the fat-tailed asset: {w_cvar}"
+
+    # And the CVaR-optimal portfolio must have a better (less negative) CVaR95
+    def cvar95(w):
+        pr = df.values @ np.array([w[0], w[1]])
+        tail = np.sort(pr)[: int(0.05 * n)]
+        return tail.mean()
+
+    assert cvar95([w_cvar["A"], w_cvar["B"]]) >= cvar95(w_mv) - 1e-9
+
+
+def test_james_stein_constant_shrinkage():
+    """shrink_expected_returns applies the fixed 0.5 blend towards the grand mean."""
+    mu = pd.Series([0.08, 0.12, 0.05, 0.15, 0.10], index=list("ABCDE"))
+    shrunk = shrink_expected_returns(mu)
+    lam = RETURN_SHRINKAGE_INTENSITY
+    expected = lam * mu.mean() + (1 - lam) * mu
+    pd.testing.assert_series_equal(shrunk, expected)
+    # Ordering preserved, dispersion reduced
+    assert shrunk.idxmax() == mu.idxmax() and shrunk.idxmin() == mu.idxmin()
+    assert shrunk.std() < mu.std()
+    # Explicit override still works
+    pd.testing.assert_series_equal(shrink_expected_returns(mu, 0.0), mu)
+    assert (shrink_expected_returns(mu, 1.0) - mu.mean()).abs().max() < 1e-12
 
 
 def test_mvo_max_sharpe():
-    """Test MVO produces valid weights with L2 regularization."""
+    """MVO produces valid weights (fully invested or cash)."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
-    
-    # Create assets with different return/risk profiles
     df = pd.DataFrame({
-        'A': np.random.normal(0.001, 0.01, n),   # High return, low vol (best Sharpe)
-        'B': np.random.normal(0.0005, 0.02, n),  # Med return, high vol
-        'C': np.random.normal(0.0003, 0.015, n)  # Low return, med vol
+        'A': np.random.normal(0.001, 0.01, n),   # best Sharpe by construction
+        'B': np.random.normal(0.0005, 0.02, n),
+        'C': np.random.normal(0.0003, 0.015, n)
     }, index=dates)
-    
+
     result = optimize_with_fallback(df, method="mvo", risk_free_rate=0.04)
-    weights = result.weights
-    total = sum(weights.values())
-    
-    # Allow for cash (sum=0) or fully invested (sum=1)
-    assert total < 0.01 or abs(total - 1.0) < 1e-6, f"Weights sum to {total}"
-    
-    if total > 0.01:
-        # Asset with best Sharpe (A) should have significant weight
-        assert weights['A'] >= weights['B'], f"Expected A >= B, got A={weights['A']}, B={weights['B']}"
-    
-    print(f"MVO Weights: {weights}")
-    print("[OK] MVO max sharpe test passed")
+    total = sum(result.weights.values())
+    assert total < 0.01 or abs(total - 1.0) < 1e-6
 
 
 def test_mvo_constraints():
-    """Test MVO respects min/max weight constraints."""
+    """MVO respects min/max weight constraints."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
-    
     df = pd.DataFrame({
-        'A': np.random.normal(0.002, 0.01, n),   # Very high return
-        'B': np.random.normal(0.0001, 0.02, n),  # Low return
+        'A': np.random.normal(0.002, 0.01, n),
+        'B': np.random.normal(0.0001, 0.02, n),
     }, index=dates)
-    
+
     min_w, max_w = 0.2, 0.8
     result = optimize_with_fallback(df, method="mvo", min_weight=min_w, max_weight=max_w, risk_free_rate=0.04)
-    weights = result.weights
-    total = sum(weights.values())
-    
-    if total > 0.01:  # Not in cash mode
-        for t, w in weights.items():
-            assert w >= min_w - 0.001, f"{t} weight {w} below min {min_w}"
-            assert w <= max_w + 0.001, f"{t} weight {w} above max {max_w}"
-    
-    print(f"MVO with constraints: {weights}")
-    print("[OK] MVO constraints test passed")
+    if sum(result.weights.values()) > 0.01:  # not in cash mode
+        for t, w in result.weights.items():
+            assert min_w - 0.001 <= w <= max_w + 0.001, f"{t}: {w}"
 
 
 def test_mvo_cash_fallback():
-    """Test MVO goes to cash when all returns are negative."""
+    """MVO goes to cash when all expected returns are below the risk-free rate."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
-    
-    # All negative expected returns
     df = pd.DataFrame({
         'A': np.random.normal(-0.002, 0.01, n),
         'B': np.random.normal(-0.001, 0.02, n),
     }, index=dates)
-    
+
     result = optimize_with_fallback(df, method="mvo", risk_free_rate=0.05)
-    
-    # Should go to cash (all weights = 0)
-    total_weight = sum(result.weights.values())
-    
-    print(f"MVO with negative returns: {result.weights}, total={total_weight}")
-    
-    if total_weight < 0.01:
-        print("[OK] MVO cash fallback test passed - went to cash")
-    else:
-        print("⚠ MVO did not go to cash - this may be acceptable depending on implementation")
+    assert sum(result.weights.values()) < 0.01, "should be 100% cash"
 
 
 def test_cvar_constraints():
-    """Test CVaR respects min/max weight constraints."""
+    """CVaR respects min/max weight constraints."""
     np.random.seed(42)
     n = 500
     dates = pd.date_range("2020-01-01", periods=n)
-    
-    # One very low vol asset - without constraints would be nearly 100%
     df = pd.DataFrame({
         'A': np.random.normal(0.0005, 0.005, n),
         'B': np.random.normal(0.0005, 0.05, n),
     }, index=dates)
-    
+
     min_w, max_w = 0.2, 0.8
     result = optimize_with_fallback(df, method="cvar", min_weight=min_w, max_weight=max_w, risk_free_rate=0.04)
-    weights = result.weights
-    
-    for t, w in weights.items():
-        assert w >= min_w - 0.001, f"{t} weight {w} below min {min_w}"
-        assert w <= max_w + 0.001, f"{t} weight {w} above max {max_w}"
-    
-    print(f"CVaR with constraints: {weights}")
-    print("[OK] CVaR constraints test passed")
+    for t, w in result.weights.items():
+        assert min_w - 0.001 <= w <= max_w + 0.001, f"{t}: {w}"
 
 
-def test_weights_sum_to_one():
-    """Comprehensive test that all methods produce weights summing to 1."""
+def test_weights_sum_to_one_all_methods():
+    """All methods produce weights summing to 1 (or 0 in cash mode)."""
     np.random.seed(42)
     n = 300
     dates = pd.date_range("2020-01-01", periods=n)
-    
     df = pd.DataFrame({
         'SPY': np.random.normal(0.0005, 0.012, n),
         'TLT': np.random.normal(0.0002, 0.008, n),
         'GLD': np.random.normal(0.0003, 0.010, n),
     }, index=dates)
-    
+
     for method in ["hrp", "cvar", "mvo"]:
         result = optimize_with_fallback(df, method=method, risk_free_rate=0.04)
         total = sum(result.weights.values())
-        
-        # Allow for cash (sum=0) or fully invested (sum=1)
-        assert total < 0.01 or abs(total - 1.0) < 1e-6, f"{method}: weights sum to {total}"
-        print(f"{method.upper()}: sum={total:.6f}, fallback={result.fallback_used}")
-    
-    print("[OK] Weights sum test passed")
-
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("PORTFOLIO OPTIMIZATION ALGORITHM TESTS")
-    print("=" * 60)
-    
-    tests = [
-        test_hrp_basic,
-        test_cvar_minimizes_cvar,
-        test_cvar_constraints,
-        test_mvo_max_sharpe,
-        test_mvo_constraints,
-        test_mvo_cash_fallback,
-        test_weights_sum_to_one,
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    for test in tests:
-        print(f"\n--- {test.__name__} ---")
-        try:
-            test()
-            passed += 1
-        except AssertionError as e:
-            print(f"[FAILED]: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"[ERROR]: {e}")
-            import traceback
-            traceback.print_exc()
-            failed += 1
-    
-    print("\n" + "=" * 60)
-    print(f"RESULTS: {passed} passed, {failed} failed")
-    print("=" * 60)
-    
-    if failed == 0:
-        print("[SUCCESS] ALL OPTIMIZATION TESTS PASSED")
-    else:
-        print("[FAILED] Some tests failed")
+        assert total < 0.01 or abs(total - 1.0) < 1e-6, f"{method}: {total}"

@@ -64,6 +64,10 @@ class OverfittingMetric(BaseModel):
     date: str
     predicted_sharpe: float
     realized_sharpe: float
+    # True when the strategy sat in cash for the period. Both Sharpes are then
+    # degenerate (0, 0) placeholders and must be EXCLUDED from predictive-power
+    # statistics (Spearman / regression) by consumers.
+    is_cash: bool = False
 
 
 class ModelParams(BaseModel):
@@ -82,10 +86,14 @@ class MethodResult(BaseModel):
 
     overfitting_metrics: List[OverfittingMetric] = []
     method_params: Optional[ModelParams] = None  # Transparency (renamed from model_params)
+    # Computed server-side on the FULL-resolution equity curve (the client only
+    # receives downsampled curves, which must never be used for these):
+    stress_tests: List[Dict[str, Any]] = []       # per historical crisis window
+    rolling_sharpe: List[Dict[str, float]] = []   # rolling annualized Sharpe (display-downsampled)
 
 
 class CompareRequest(BaseModel):
-    tickers: List[str] = Field(..., min_length=2)
+    tickers: List[str] = Field(..., min_length=2, max_length=30)
     start_date: Optional[str] = Field(default=None)
     end_date: Optional[str] = Field(default=None)
     training_window: int = Field(default=252, ge=60, le=1260)
@@ -101,6 +109,23 @@ class CompareRequest(BaseModel):
     target_volatility: float = Field(default=0.12, ge=0.05, le=0.30, description="Target annualized volatility (5-30%)")
     # CVaR confidence level
     cvar_confidence: float = Field(default=0.95, ge=0.5, le=0.99, description="CVaR confidence level")
+
+    @field_validator('tickers', mode='after')
+    @classmethod
+    def validate_tickers(cls, v):
+        """Normalize (strip/upper) and reject malformed tickers before they
+        reach the data provider (path segments, abuse, junk input)."""
+        import re
+        cleaned = []
+        for t in v:
+            t2 = str(t).strip().upper()
+            if not re.fullmatch(r'[A-Z0-9.\-]{1,12}', t2):
+                raise ValueError(f"Invalid ticker: '{t}' (expected 1-12 chars: letters, digits, '.', '-')")
+            cleaned.append(t2)
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("Duplicate tickers in request")
+        return cleaned
+
     @field_validator('start_date', 'end_date', mode='before')
     @classmethod
     def validate_date_format(cls, v):
@@ -112,14 +137,16 @@ class CompareRequest(BaseModel):
         return v
 
     @model_validator(mode='after')
-    def validate_weight_constraints(self):
-        """Ensure weight constraints are feasible."""
+    def validate_constraints(self):
+        """Ensure weight constraints are feasible and dates are ordered."""
         if self.min_weight > self.max_weight:
             raise ValueError('min_weight cannot exceed max_weight')
         # Check feasibility: n * min_weight must be <= 1 and n * max_weight >= 1
         # We can't check exact n here, but we can warn if min_weight > 0.5 (impossible for n>=2)
         if self.min_weight > 0.5:
             raise ValueError('min_weight > 50% is infeasible for 2+ assets')
+        if self.start_date and self.end_date and self.start_date >= self.end_date:
+            raise ValueError('start_date must be strictly before end_date')
         return self
 
 

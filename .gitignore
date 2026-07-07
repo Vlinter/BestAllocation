@@ -33,3 +33,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Debug artifacts
+debug_output.txt
+
+# Joblib cache
+backend/__cache__/
+__cache__/

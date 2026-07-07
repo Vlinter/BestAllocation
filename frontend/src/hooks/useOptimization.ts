@@ -15,6 +15,7 @@ export interface OptimizationParams {
     benchmarkTicker: string;
     enableVolatilityScaling: boolean;
     targetVolatility: number;
+    cvarConfidence: number;
 }
 
 interface UseOptimizationReturn {
@@ -67,6 +68,7 @@ export function useOptimization(): UseOptimizationReturn {
                 benchmark_ticker: params.benchmarkTicker,
                 enable_volatility_scaling: params.enableVolatilityScaling,
                 target_volatility: params.targetVolatility,
+                cvar_confidence: params.cvarConfidence,
             };
 
             const { job_id } = await startComparisonJob(request);

@@ -18,11 +18,12 @@ interface MetricConfig {
     label: string;
 }
 
+// Note: total_return is deliberately NOT in this list — it is the same
+// information as CAGR (same start/end values) and would double-count a win.
 const METRICS_TO_COMPARE: MetricConfig[] = [
     { key: 'sharpe_ratio', higherIsBetter: true, label: 'Sharpe Ratio' },
     { key: 'sortino_ratio', higherIsBetter: true, label: 'Sortino Ratio' },
     { key: 'cagr', higherIsBetter: true, label: 'CAGR' },
-    { key: 'total_return', higherIsBetter: true, label: 'Total Return' },
     { key: 'max_drawdown', higherIsBetter: false, label: 'Max Drawdown' },
     { key: 'volatility', higherIsBetter: false, label: 'Volatility' },
     { key: 'calmar_ratio', higherIsBetter: true, label: 'Calmar Ratio' },

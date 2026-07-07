@@ -16,7 +16,6 @@ import type { MethodResult } from '../api/client';
 
 interface RollingSharpeChartProps {
     methods: MethodResult[];
-    rollingWindow?: number; // in trading days, default 252
 }
 
 const METHOD_COLORS: Record<string, string> = {
@@ -25,58 +24,39 @@ const METHOD_COLORS: Record<string, string> = {
     mvo: '#A78BFA',
 };
 
-const RollingSharpeChart: React.FC<RollingSharpeChartProps> = ({ methods, rollingWindow = 252 }) => {
+const RollingSharpeChart: React.FC<RollingSharpeChartProps> = ({ methods }) => {
     const chartData = useMemo(() => {
         if (!methods.length) return [];
 
-        // Build rolling Sharpe for each method from equity curve
-        const methodSeries: Record<string, { dates: number[]; values: number[] }> = {};
-
+        // The rolling Sharpe is computed SERVER-SIDE on the full-resolution
+        // daily equity curve (metrics.calculate_rolling_sharpe), with the
+        // correct annualization and risk-free rate. Never recompute it here:
+        // the displayed equity curve is downsampled to ~500 points, and
+        // treating multi-day steps as daily returns inflates Sharpe by ~sqrt(step).
+        const methodSeries: Record<string, Map<number, number>> = {};
         methods.forEach(m => {
-            const curve = m.equity_curve;
-            if (curve.length < rollingWindow + 1) return;
-
-            // Compute daily returns
-            const returns: number[] = [];
-            for (let i = 1; i < curve.length; i++) {
-                returns.push((curve[i].value - curve[i - 1].value) / curve[i - 1].value);
+            if (m.rolling_sharpe?.length) {
+                methodSeries[m.method] = new Map(m.rolling_sharpe.map(p => [p.date, p.value]));
             }
-
-            const dates: number[] = [];
-            const sharpes: number[] = [];
-            const annFactor = Math.sqrt(252);
-
-            for (let i = rollingWindow; i < returns.length; i++) {
-                const window = returns.slice(i - rollingWindow, i);
-                const mean = window.reduce((a, b) => a + b, 0) / window.length;
-                const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / (window.length - 1);
-                const std = Math.sqrt(variance);
-                const sharpe = std > 1e-8 ? (mean / std) * annFactor : 0;
-                // Cap for display
-                const cappedSharpe = Math.max(-5, Math.min(5, sharpe));
-
-                dates.push(curve[i + 1]?.date ?? curve[i].date);
-                sharpes.push(cappedSharpe);
-            }
-
-            methodSeries[m.method] = { dates, values: sharpes };
         });
 
-        // Merge into unified timeline
         const allMethods = Object.keys(methodSeries);
         if (!allMethods.length) return [];
 
-        const primaryMethod = allMethods[0];
-        const primaryDates = methodSeries[primaryMethod].dates;
+        // Merge on the union of timestamps so methods with different lengths align by date
+        const allDates = Array.from(
+            new Set(allMethods.flatMap(method => Array.from(methodSeries[method].keys())))
+        ).sort((a, b) => a - b);
 
-        return primaryDates.map((date, i) => {
-            const point: Record<string, number> = { date };
+        return allDates.map(date => {
+            const point: Record<string, number | null> = { date };
             allMethods.forEach(method => {
-                point[method] = Number((methodSeries[method]?.values[i] ?? 0).toFixed(3));
+                const v = methodSeries[method].get(date);
+                point[method] = v !== undefined ? v : null;
             });
             return point;
         });
-    }, [methods, rollingWindow]);
+    }, [methods]);
 
     if (!chartData.length) return null;
 
@@ -108,7 +88,7 @@ const RollingSharpeChart: React.FC<RollingSharpeChartProps> = ({ methods, rollin
                         Rolling Sharpe Ratio
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)' }}>
-                        {rollingWindow}-day rolling window • Annualized • Capped at ±5
+                        252-day rolling window • Annualized, net of risk-free • Capped at ±5
                     </Typography>
                 </Box>
             </Box>

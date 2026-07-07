@@ -96,8 +96,9 @@ def tiingo_request(endpoint: str, params: dict = None) -> dict | list:
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Tiingo API error: {e}")
-        raise HTTPException(status_code=500, detail=f"Data provider error: {str(e)}")
+        # Full detail server-side only; client gets a generic message
+        logger.error(f"Tiingo API error on {endpoint}: {e}")
+        raise HTTPException(status_code=502, detail="Market data provider request failed. Please try again later.")
 
 
 def fetch_crypto_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[pd.Series, pd.Series]:
@@ -273,7 +274,10 @@ def fetch_fred_series(series_id: str, start_date: Optional[str] = None, end_date
         return series
         
     except Exception as e:
-        logger.error(f"Error fetching FRED series {series_id}: {e}")
+        # Never log the raw exception: FRED puts the api_key in the query string,
+        # so a connection error message would leak the key into server logs.
+        msg = str(e).replace(FRED_API_KEY, "***") if FRED_API_KEY else str(e)
+        logger.error(f"Error fetching FRED series {series_id}: {msg}")
         return pd.Series(dtype=float)
 
 
@@ -423,9 +427,14 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
             close_prices = close_prices[close_prices.index >= latest_start_date]
             open_prices = open_prices[open_prices.index >= latest_start_date]
         
-        # Forward fill missing values and drop any remaining NaN
-        close_prices = close_prices.ffill().dropna()
-        open_prices = open_prices.ffill().dropna()
+        # Align all tickers on their COMMON trading calendar (row-wise intersection).
+        # Do NOT forward-fill across the union of calendars: mixing 24/7 crypto with
+        # 5-day stocks would keep weekend rows with stale (Friday) stock prices,
+        # injecting fake zero returns that dilute measured correlations and distort
+        # the optimizers' view of diversification. Same issue for cross-country
+        # holiday calendars. Intersecting keeps only dates where every ticker traded.
+        close_prices = close_prices.dropna()
+        open_prices = open_prices.dropna()
         
         # Align indices (ensure both have same dates)
         common_index = close_prices.index.intersection(open_prices.index)
@@ -450,4 +459,5 @@ def fetch_price_data(tickers: List[str], start_date: Optional[str], end_date: Op
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching data: {str(e)}")
+        logger.error(f"Unexpected error fetching price data for {tickers}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error while fetching market data.")

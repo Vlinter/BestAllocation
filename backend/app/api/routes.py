@@ -10,7 +10,6 @@ from ..core.schemas import (
     OptimizationResponse, PerformanceMetrics, 
     CurrentAllocation, CompareRequest, CompareResponse, MethodResult, ModelParams
 )
-from ..core.config import TARGET_VOLATILITY, ENABLE_VOLATILITY_SCALING
 from ..services.jobs import job_manager
 
 # Import from original backend root (still there until fully moved)
@@ -20,7 +19,10 @@ from ..services.jobs import job_manager
 # We will use absolute imports assuming the app is run from root.
 
 from backend.data_provider import fetch_price_data, get_risk_free_rate, fetch_risk_free_rate_history
-from backend.metrics import calculate_metrics, calculate_drawdown_curve, calculate_correlation_matrix, infer_trading_frequency
+from backend.metrics import (
+    calculate_metrics, calculate_drawdown_curve, calculate_correlation_matrix,
+    infer_trading_frequency, calculate_stress_tests, calculate_rolling_sharpe
+)
 from backend.backtester import walk_forward_backtest, get_custom_benchmark, get_equal_weight_benchmark
 from backend.optimization import calculate_efficient_frontier
 
@@ -89,22 +91,35 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return sanitize_nan(job)
 
-# Strategy Runner Logic (Extracted from main.py)
+# Strategy Runner Logic
 def _run_strategy(
     method: str,
     prices: pd.DataFrame,
     open_prices: pd.DataFrame,
     request: CompareRequest,
     risk_free_rate: Union[float, pd.Series],
+    rf_metrics: float,
     trading_days_per_year: int,
     cvar_alpha: float,
-    job_id: str,
+    benchmark_returns: Optional[pd.Series],
     progress_callback
 ) -> Optional[MethodResult]:
+    """
+    Run one strategy end-to-end.
+
+    risk_free_rate: scalar or full FRED series, used INSIDE the backtest
+                    (cash accrual, go-to-cash decisions).
+    rf_metrics:     single scalar (mean of the series over the backtest window),
+                    used for ALL performance metrics — the same value is used for
+                    the benchmark metrics so Sharpe ratios are directly comparable.
+    benchmark_returns: daily returns of the benchmark the USER selected
+                    (custom ticker or equal-weight), so alpha/beta are measured
+                    against what is actually displayed as "Benchmark".
+    """
     try:
-        (equity_curve, bench_curve, allocation_history, rebalance_dates, 
+        (equity_curve, allocation_history, rebalance_dates,
          current_weights, total_costs, annualized_turnover_pct, overfitting_metrics,
-         risk_contributions, bench_turnover_val, dendrogram_data_comp) = walk_forward_backtest(
+         risk_contributions, dendrogram_data_comp) = walk_forward_backtest(
             prices=prices,
             open_prices=open_prices,
             method=method,
@@ -119,33 +134,32 @@ def _run_strategy(
             target_volatility=request.target_volatility,
             progress_callback=progress_callback
         )
-        
+
         if not equity_curve:
             return None
-        
+
         drawdown_curve = calculate_drawdown_curve(equity_curve)
-        
+
         equity_series = pd.Series(
             [e["value"] for e in equity_curve],
             index=pd.to_datetime([e["date"] for e in equity_curve], unit="ms")
         )
-        
-        # Benchmark for metrics
-        benchmark_series = pd.Series(
-             [b["value"] for b in bench_curve],
-             index=pd.to_datetime([b["date"] for b in bench_curve], unit="ms")
-        )
-        benchmark_returns = benchmark_series.pct_change().dropna()
-        
-        rf_scalar = float(risk_free_rate.mean()) if isinstance(risk_free_rate, pd.Series) else float(risk_free_rate)
-        
+
         performance_metrics = calculate_metrics(
-            equity_series, rf_scalar, total_costs, 
+            equity_series, rf_metrics, total_costs,
             len(rebalance_dates), annualized_turnover_pct,
             benchmark_returns=benchmark_returns,
             annualization_factor=trading_days_per_year
         )
-        
+
+        # Full-resolution analytics — MUST be computed before downsampling:
+        # crisis windows and rolling Sharpe need daily granularity.
+        stress_tests = calculate_stress_tests(equity_curve)
+        rolling_sharpe = calculate_rolling_sharpe(
+            equity_curve, risk_free_rate=rf_metrics,
+            annualization_factor=trading_days_per_year
+        )
+
         current_alloc = CurrentAllocation(
             date=datetime.now().strftime("%Y-%m-%d"),
             weights=current_weights or {},
@@ -153,13 +167,14 @@ def _run_strategy(
             method=method,
             dendrogram_data=dendrogram_data_comp
         )
-        
+
         method_params = get_model_params(method)
-        
-        # Downsample for network payload efficiency
+
+        # Downsample for network payload efficiency (display only)
         equity_curve_payload = downsample_curve(equity_curve, 500)
         drawdown_curve_payload = downsample_curve(drawdown_curve, 500)
-        
+        rolling_sharpe_payload = downsample_curve(rolling_sharpe, 500)
+
         return MethodResult(
             method=method,
             method_name=METHOD_NAMES.get(method, method),
@@ -169,79 +184,113 @@ def _run_strategy(
             current_allocation=current_alloc,
             allocation_history=allocation_history,
             overfitting_metrics=overfitting_metrics,
-            method_params=method_params
+            method_params=method_params,
+            stress_tests=stress_tests,
+            rolling_sharpe=rolling_sharpe_payload
         )
     except Exception as e:
-        logger.error(f"Error in method {method}: {e}")
+        logger.error(f"Error in method {method}: {e}", exc_info=True)
         return None
 
 def run_comparison_job(job_id: str, request: CompareRequest):
     """Background task to run the comparison logic."""
     try:
         job_manager.update_job(job_id, 5, "Fetching Historical Market Data...", status="processing")
-        
+
         # 1. Setup & Data Fetching
         rf_rate_current = get_risk_free_rate()
         risk_free_rate_series = fetch_risk_free_rate_history(request.start_date, request.end_date)
         backtest_rf_input = risk_free_rate_series if not risk_free_rate_series.empty else rf_rate_current
 
-        tickers = [t.strip().upper() for t in request.tickers]
-        
-        if len(tickers) < 2:
-            raise ValueError("At least 2 tickers required")
-        
+        tickers = list(request.tickers)  # already normalized (upper/strip) by the schema
+
         end_date = request.end_date if request.end_date else datetime.now().strftime("%Y-%m-%d")
         start_date = request.start_date
-        
+
         prices, open_prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
-        
+
         trading_days_per_year = infer_trading_frequency(prices.index)
-        
+
+        # Unified risk-free scalar for ALL performance metrics (strategies AND
+        # benchmark): mean of the historical T-Bill series over the actual
+        # backtest window. Using different rates (e.g. today's rate for the
+        # benchmark, a long-run mean for strategies) would skew Sharpe comparisons.
+        bt_index = prices.index[min(request.training_window, max(len(prices.index) - 1, 0)):]
+        if isinstance(backtest_rf_input, pd.Series) and len(bt_index) > 0:
+            rf_window = backtest_rf_input.loc[
+                (backtest_rf_input.index >= bt_index[0]) & (backtest_rf_input.index <= bt_index[-1])
+            ]
+            rf_metrics = float(rf_window.mean()) if not rf_window.empty else float(rf_rate_current)
+        else:
+            rf_metrics = float(backtest_rf_input) if not isinstance(backtest_rf_input, pd.Series) else float(rf_rate_current)
+
+        job_manager.update_job(job_id, 12, "Building Benchmark...")
+
+        # 2. Benchmark FIRST — the per-strategy alpha/beta must be measured
+        # against the benchmark the user actually selected and sees on screen.
+        benchmark_curve = None
+        benchmark_name = "Equal Weight"
+        bench_turnover = 0.0
+        if request.benchmark_type == "custom" and request.benchmark_ticker:
+            benchmark_curve, benchmark_name = get_custom_benchmark(
+                prices, request.training_window, request.benchmark_ticker
+            )
+        if not benchmark_curve:
+            benchmark_curve, bench_turnover = get_equal_weight_benchmark(
+                prices, request.training_window, tickers,
+                request.rebalancing_window, request.transaction_cost_bps
+            )
+            benchmark_name = "Equal Weight"
+
+        benchmark_series = pd.Series(
+            [b["value"] for b in benchmark_curve],
+            index=pd.to_datetime([b["date"] for b in benchmark_curve], unit="ms")
+        )
+        benchmark_returns = benchmark_series.pct_change().dropna()
+
         job_manager.update_job(job_id, 15, "Preparing Backtest Engine...")
-        
-        cvar_alpha = 1.0 - getattr(request, 'cvar_confidence', 0.95)
+
+        cvar_alpha = 1.0 - request.cvar_confidence
         methods_to_run = ["hrp", "cvar", "mvo"]
         method_results = []
-        benchmark_curve = None
-        benchmark_metrics = None
-        benchmark_name = "Equal Weight"
-        
-        # 2. Parallel Execution
+
+        # 3. Parallel Execution
         total_methods = len(methods_to_run)
-        
+
         job_manager.update_job(job_id, 15, f"Running {', '.join([m.upper() for m in methods_to_run])} in parallel...")
-        
+
         method_progress = {m: 0.0 for m in methods_to_run}
-        
+
         def make_progress_callback(method_name):
             def callback(p):
                 method_progress[method_name] = p
                 total_p = sum(method_progress.values()) / total_methods
                 current_progress = 15 + (total_p * 70)
                 job_manager.update_job(
-                    job_id, 
-                    int(current_progress), 
+                    job_id,
+                    int(current_progress),
                     f"Optimizing ({int(total_p * 100)}%)"
                 )
             return callback
-        
+
         with ThreadPoolExecutor(max_workers=min(total_methods, 4)) as executor:
             future_to_method = {
                 executor.submit(
                     _run_strategy,
-                    method, 
+                    method,
                     prices,
                     open_prices,
-                    request, 
-                    backtest_rf_input, 
-                    trading_days_per_year, 
-                    cvar_alpha, 
-                    job_id, 
+                    request,
+                    backtest_rf_input,
+                    rf_metrics,
+                    trading_days_per_year,
+                    cvar_alpha,
+                    benchmark_returns,
                     make_progress_callback(method)
-                ): method 
+                ): method
                 for method in methods_to_run
             }
-            
+
             for future in as_completed(future_to_method):
                 method = future_to_method[future]
                 try:
@@ -249,42 +298,22 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                     if result:
                         method_results.append(result)
                 except Exception as exc:
-                    logger.error(f"Strategy {method} generated an exception: {exc}")
-                
+                    logger.error(f"Strategy {method} generated an exception: {exc}", exc_info=True)
+
                 # Make sure this method is marked 100% complete internally
                 method_progress[method] = 1.0
                 total_p = sum(method_progress.values()) / total_methods
                 current_progress = 15 + (total_p * 70)
                 job_manager.update_job(job_id, int(current_progress), f"Completed {METHOD_NAMES.get(method, method)}...")
 
-        # Benchmark Logic
-        if method_results:
-            if request.benchmark_type == "custom" and request.benchmark_ticker:
-                benchmark_curve, benchmark_name = get_custom_benchmark(
-                    prices, request.training_window, request.benchmark_ticker
-                )
-            
-            if not benchmark_curve:
-                benchmark_curve, bench_turnover = get_equal_weight_benchmark(
-                    prices, request.training_window, request.tickers, request.rebalancing_window
-                )
-                benchmark_name = "Equal Weight"
-            else:
-                bench_turnover = 0.0
-            
-            benchmark_series = pd.Series(
-                [b["value"] for b in benchmark_curve],
-                index=pd.to_datetime([b["date"] for b in benchmark_curve], unit="ms")
-            )
-            
-            benchmark_metrics = calculate_metrics(
-                benchmark_series, rf_rate_current, 
-                0, 0, bench_turnover, 
-                annualization_factor=trading_days_per_year
-            )
-        
         if not method_results:
             raise ValueError("Could not generate results for any method")
+
+        benchmark_metrics = calculate_metrics(
+            benchmark_series, rf_metrics,
+            0, 0, bench_turnover,
+            annualization_factor=trading_days_per_year
+        )
         
         # 3. Post-Processing
         job_manager.update_job(job_id, 85, "Calculating Correlation Matrix...")
@@ -325,7 +354,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             ),
             benchmark_name=benchmark_name,
             tickers=tickers,
-            risk_free_rate=round(rf_rate_current, 4),
+            risk_free_rate=round(rf_metrics, 4),
             data_start_date=prices.index[0].strftime("%Y-%m-%d"),
             data_end_date=prices.index[-1].strftime("%Y-%m-%d"),
             ticker_start_dates=ticker_start_dates,
@@ -337,9 +366,22 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         
         job_manager.update_job(job_id, 100, "Optimization Complete", status="completed", result=sanitize_nan(response.dict()))
 
-    except Exception as e:
-        logger.error(f"Job {job_id} failed: {e}")
+    except HTTPException as e:
+        # Intentional, user-actionable messages (bad tickers, not enough data...)
+        logger.warning(f"Job {job_id} rejected: {e.detail}")
+        job_manager.update_job(job_id, 0, "Failed", status="failed", error=str(e.detail))
+    except ValueError as e:
+        # Our own validation errors — safe to show
+        logger.warning(f"Job {job_id} invalid: {e}")
         job_manager.update_job(job_id, 0, "Failed", status="failed", error=str(e))
+    except Exception as e:
+        # Unexpected internal errors: full detail in server logs only,
+        # generic message to the client (no paths, no stack fragments).
+        logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+        job_manager.update_job(
+            job_id, 0, "Failed", status="failed",
+            error="Internal error during computation. Please try again or adjust your parameters."
+        )
 
 
 @router.post("/compare/start")

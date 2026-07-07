@@ -18,6 +18,8 @@ export interface CompareRequest {
   // Volatility Scaling (Quant Enhancement)
   enable_volatility_scaling?: boolean;
   target_volatility?: number;
+  // CVaR confidence level (0.5-0.99), drives the Min-CVaR optimizer's beta
+  cvar_confidence?: number;
 }
 
 export interface PerformanceMetrics {
@@ -74,6 +76,26 @@ export interface ModelParams {
   linkage_method?: string;
 }
 
+export interface OverfittingMetric {
+  date: string;
+  predicted_sharpe: number;
+  realized_sharpe: number;
+  // True when the strategy sat in cash for the period: the (0, 0) pair is a
+  // placeholder and must be EXCLUDED from Spearman/regression statistics.
+  is_cash?: boolean;
+}
+
+// Computed server-side on the FULL-resolution equity curve
+export interface StressTestResult {
+  name: string;
+  description: string;
+  start: string;
+  end: string;
+  return: number;
+  max_drawdown: number;
+  available: boolean;
+}
+
 export interface MethodResult {
   method: string;
   method_name: string;
@@ -83,12 +105,10 @@ export interface MethodResult {
   current_allocation: CurrentAllocation;
   allocation_history: AllocationEntry[];
 
-  overfitting_metrics: Array<{
-    date: string;
-    predicted_sharpe: number;
-    realized_sharpe: number;
-  }>;
+  overfitting_metrics: OverfittingMetric[];
   method_params?: ModelParams;
+  stress_tests?: StressTestResult[];
+  rolling_sharpe?: CurvePoint[];
 }
 
 export interface CorrelationMatrix {

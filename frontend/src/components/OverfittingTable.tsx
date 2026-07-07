@@ -148,7 +148,9 @@ const METHOD_COLORS: Record<string, string> = {
 };
 
 const calculateStats = (method: MethodResult): OverfittingStats | null => {
-    const data = method.overfitting_metrics || [];
+    // Exclude cash periods: their (0, 0) placeholder pairs would count as
+    // perfect predictions and skew success rate, correlation and stability.
+    const data = (method.overfitting_metrics || []).filter(d => !d.is_cash);
 
     if (data.length === 0) return null;
 

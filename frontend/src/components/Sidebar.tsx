@@ -46,7 +46,7 @@ export interface OptimizationParams {
     benchmarkTicker: string;
     enableVolatilityScaling: boolean;
     targetVolatility: number;
-    cvar_confidence: number;
+    cvarConfidence: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFullscreen = false }) => {
@@ -112,7 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
             benchmarkTicker,
             enableVolatilityScaling,
             targetVolatility: targetVolatility / 100,
-            cvar_confidence: cvarConfidence / 100,
+            cvarConfidence: cvarConfidence / 100,
         });
     };
 
