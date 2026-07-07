@@ -1,5 +1,13 @@
 # Revue produit — BestAllocation comme outil réel d'allocation
 
+> **STATUT (2026-07-07) : corrigé.** Tous les points 🔴 (R1-R7) et 🟠 (I1, I3-I7)
+> ci-dessous ont été traités sur la branche `fix/review-roadmap`, avec tests de
+> non-régression (pytest 20/20, dont un test discriminant CVaR-vs-min-variance sur
+> rendements asymétriques) et CI GitHub Actions. I2 (CVaR ~13 obs de queue) est une
+> limite intrinsèque, désormais documentée dans le README et DOCUMENTATION.md.
+> Ce document est conservé comme trace d'audit ; les détails ci-dessous décrivent
+> l'état AVANT correction.
+
 **Date :** 2026-07-06
 **Angle :** est-ce que je peux **me fier aux chiffres affichés** et utiliser ce site pour mes propres décisions d'allocation ? Où sont les erreurs, qu'est-ce qui est réellement bon, et quelles améliorations apporteraient le plus de valeur ?
 **Méthode :** lecture intégrale du backend et des composants frontend qui calculent des chiffres, exécution des suites de tests (7/7 et 4/4 passés), et 4 scripts de vérification empirique (James-Stein, CVaR vs min-variance sur rendements asymétriques, biais alpha CAGR, contamination week-end des portefeuilles mixtes crypto+actions).

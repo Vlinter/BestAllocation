@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict
 from scipy.stats import skew, kurtosis as kurt
 from backend.app.core.schemas import PerformanceMetrics
-from .config import TRADING_DAYS_PER_YEAR, MIN_POINTS_FOR_RELIABLE_SHARPE
+from .config import TRADING_DAYS_PER_YEAR, STRESS_SCENARIOS, ROLLING_SHARPE_WINDOW
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,11 @@ def calculate_metrics(equity_curve: pd.Series, risk_free_rate: float,
     else:
         omega_ratio = 999.0 if gains.sum() > 0 else 1.0
     
-    # Alpha and Beta (CAPM)
+    # Alpha and Beta (CAPM) — estimated on daily arithmetic excess returns.
+    # beta = Cov(r_p, r_b) / Var(r_b) on daily returns; alpha is the OLS intercept
+    # of (r_p - rf_d) = alpha_d + beta * (r_b - rf_d), annualized (x trading_days).
+    # Using arithmetic means keeps alpha consistent with the daily beta estimate;
+    # plugging compounded CAGRs into the CAPM line would inflate alpha by ~sigma^2/2.
     alpha = 0.0
     beta = 0.0
     if benchmark_returns is not None and len(benchmark_returns) > 10:
@@ -126,15 +130,13 @@ def calculate_metrics(equity_curve: pd.Series, risk_free_rate: float,
         if len(common_idx) > 10:
             port_ret = returns.loc[common_idx]
             bench_ret = benchmark_returns.loc[common_idx]
-            
+
             covariance = np.cov(port_ret, bench_ret)[0, 1]
             bench_variance = np.var(bench_ret, ddof=1)
             if bench_variance > 1e-10:
                 beta = covariance / bench_variance
-            
-            # Use dynamic trading_days for bench CAGR too
-            bench_cagr = (1 + bench_ret).prod() ** (trading_days / len(bench_ret)) - 1
-            alpha = cagr - (risk_free_rate + beta * (bench_cagr - risk_free_rate))
+
+            alpha = ((port_ret.mean() - daily_rf) - beta * (bench_ret.mean() - daily_rf)) * trading_days
     
     return PerformanceMetrics(
         sharpe_ratio=round(safe_float(sharpe_ratio), 4),
@@ -200,6 +202,75 @@ def calculate_risk_contributions(weights: Dict[str, float], cov_matrix: pd.DataF
         return {t: 1.0/n for t in weights}
 
 
+def calculate_stress_tests(equity_curve: List[Dict]) -> List[Dict]:
+    """
+    Compute per-scenario performance on the FULL-resolution equity curve.
+    Must be called BEFORE any downsampling: crisis windows are short (11-60
+    trading days) and intra-period drawdowns need daily granularity.
+
+    Returns one entry per scenario in STRESS_SCENARIOS:
+        {name, description, start, end, return, max_drawdown, available}
+    """
+    results = []
+    if not equity_curve:
+        return results
+
+    dates_ms = np.array([p["date"] for p in equity_curve], dtype=np.float64)
+    values = np.array([p["value"] for p in equity_curve], dtype=np.float64)
+
+    for sc in STRESS_SCENARIOS:
+        start_ms = pd.Timestamp(sc["start"]).value / 1e6
+        end_ms = pd.Timestamp(sc["end"]).value / 1e6
+        mask = (dates_ms >= start_ms) & (dates_ms <= end_ms)
+        window = values[mask]
+
+        entry = {
+            "name": sc["name"],
+            "description": sc["description"],
+            "start": sc["start"],
+            "end": sc["end"],
+            "return": 0.0,
+            "max_drawdown": 0.0,
+            "available": False,
+        }
+        if len(window) >= 2 and window[0] > 0:
+            running_peak = np.maximum.accumulate(window)
+            drawdowns = (window - running_peak) / running_peak
+            entry["return"] = round(float(window[-1] / window[0] - 1), 4)
+            entry["max_drawdown"] = round(float(abs(drawdowns.min())), 4)
+            entry["available"] = True
+        results.append(entry)
+
+    return results
+
+
+def calculate_rolling_sharpe(equity_curve: List[Dict], risk_free_rate: float = 0.0,
+                             window: int = ROLLING_SHARPE_WINDOW,
+                             annualization_factor: int = TRADING_DAYS_PER_YEAR) -> List[Dict[str, float]]:
+    """
+    Rolling annualized Sharpe ratio on the FULL-resolution equity curve.
+    Computed server-side so the annualization factor matches the actual daily
+    frequency (the downsampled display curve must never be used for this).
+    """
+    if len(equity_curve) < window + 2:
+        return []
+
+    series = pd.Series(
+        [p["value"] for p in equity_curve],
+        index=[p["date"] for p in equity_curve]
+    )
+    rets = series.pct_change().dropna()
+    daily_rf = risk_free_rate / annualization_factor if annualization_factor > 0 else 0.0
+    excess = rets - daily_rf
+
+    roll_mean = excess.rolling(window).mean()
+    roll_std = excess.rolling(window).std()  # ddof=1
+    sharpe = (roll_mean / roll_std.replace(0.0, np.nan)) * np.sqrt(annualization_factor)
+    sharpe = sharpe.clip(-5.0, 5.0).dropna()
+
+    return [{"date": float(d), "value": round(float(v), 3)} for d, v in sharpe.items()]
+
+
 def calculate_drawdown_curve(equity_curve: List[Dict]) -> List[Dict[str, float]]:
     """Calculate drawdown at each point."""
     values = [p["value"] for p in equity_curve]
@@ -263,7 +334,7 @@ def calculate_correlation_matrix(prices: pd.DataFrame) -> dict:
         # Convert to condensed form for linkage
         condensed = squareform(distance_matrix)
         
-        # Hierarchical clustering using Ward's method
+        # Hierarchical clustering (average linkage) for heatmap ordering
         linkage_matrix = linkage(condensed, method='average')
         
         # Get optimal leaf order

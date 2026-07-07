@@ -18,7 +18,9 @@ import type { MethodResult } from '../api/client';
 // Copied "calculateStats" logic simplified for visual cards.
 
 const calculateReliability = (method: MethodResult) => {
-    const data = method.overfitting_metrics || [];
+    // Exclude cash periods: their (0, 0) placeholder pairs would count as
+    // perfect predictions and inflate every component of the score.
+    const data = (method.overfitting_metrics || []).filter(d => !d.is_cash);
     if (data.length === 0) return null;
 
     const n = data.length;

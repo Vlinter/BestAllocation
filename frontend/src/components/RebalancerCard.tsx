@@ -107,6 +107,15 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
         [trades]
     );
 
+    // Strategy weights may sum to < 1 (risk-off / volatility scaling): the
+    // remainder is an explicit CASH target. Without this line the card would
+    // instruct the user to sell without saying where the money goes.
+    const cashTargetWeight = useMemo(() => {
+        const invested = tickers.reduce((s, t) => s + (targetWeights[t] || 0), 0);
+        return Math.max(0, 1 - invested);
+    }, [targetWeights, tickers]);
+    const cashTargetAmount = cashTargetWeight * totalPortfolio;
+
     const handleHoldingChange = (ticker: string, value: string) => {
         const num = parseFloat(value) || 0;
         setHoldings(prev => ({ ...prev, [ticker]: Math.max(0, num) }));
@@ -436,6 +445,28 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
                             </Box>
                         );
                     })}
+
+                    {/* Cash target notice (risk-off strategies) */}
+                    {cashTargetWeight > 0.005 && (
+                        <Box sx={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            mt: 1, py: 1.2, px: 1.5, borderRadius: 1,
+                            bgcolor: 'rgba(167, 139, 250, 0.06)',
+                            border: '1px dashed rgba(167, 139, 250, 0.35)',
+                        }}>
+                            <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 700, color: '#A78BFA' }}>
+                                    💵 CASH — {(cashTargetWeight * 100).toFixed(1)}%
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    This strategy is partially risk-off: keep this amount uninvested (earns the risk-free rate in the backtest)
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#A78BFA' }}>
+                                {fmt$(cashTargetAmount)}
+                            </Typography>
+                        </Box>
+                    )}
 
                     {/* Hidden trades notice */}
                     {!showSmallTrades && trades.length > visibleTrades.length && (

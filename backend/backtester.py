@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from .optimization import optimize_with_fallback, OptimizationResult
 from .config import (
     TRADING_DAYS_PER_YEAR, TURNOVER_SMOOTHING_FACTOR,
-    TARGET_VOLATILITY, VOLATILITY_LOOKBACK, ENABLE_VOLATILITY_SCALING
+    TARGET_VOLATILITY, VOLATILITY_LOOKBACK
 )
 # Import the new helper
 from .metrics import infer_trading_frequency
@@ -185,7 +185,7 @@ def walk_forward_backtest(
     enable_volatility_scaling: bool = False,
     target_volatility: float = 0.12,
     progress_callback = None # Optional callback(float) 0-1
-) -> Tuple[List[Dict], List[Dict], List[Dict], List[str], Dict, float, float, List[Dict], Dict, float, Optional[Dict]]:
+) -> Tuple[List[Dict], List[Dict], List[str], Dict, float, float, List[Dict], Dict, Optional[Dict]]:
     """
     Execute a Walk-Forward Backtest using Share-Based Logic (Realistic).
     
@@ -252,6 +252,12 @@ def walk_forward_backtest(
     latest_dendrogram_data = None
 
     while current_idx < len(dates):
+        # A decision made on the LAST available date can never be executed
+        # (there is no T+1 open to trade at) — trading it same-day at Open(T)
+        # would be a small look-ahead. Stop cleanly instead.
+        if current_idx + 1 >= len(dates):
+            break
+
         # 1. Period Setup
         current_date = dates[current_idx]
         
@@ -317,7 +323,8 @@ def walk_forward_backtest(
         # 3. REBALANCE PORTFOLIO
         # REALISTIC EXECUTION: Execute at Open of T+1 (not Close of T)
         # This eliminates look-ahead bias - we can't trade at a price we just discovered
-        execution_idx = min(current_idx + 1, len(dates) - 1)
+        # (current_idx + 1 < len(dates) is guaranteed by the guard at loop start)
+        execution_idx = current_idx + 1
         execution_date = dates[execution_idx]
         prices_at_execution = open_prices_clean.iloc[execution_idx]  # Open of T+1
         
@@ -381,12 +388,17 @@ def walk_forward_backtest(
         rebalance_dates.append(current_date.strftime("%Y-%m-%d"))
 
         # 4. WALK FORWARD (HOLDING PERIOD) (VECTORIZED)
-        # Start from execution day (T+1) since that's when we actually hold the new positions
+        # Start from execution day (T+1) since that's when we actually hold the new positions.
+        # The block extends THROUGH the next decision date (inclusive): on that date we
+        # still hold the current shares (its rebalance only executes at the following
+        # open), so its close belongs to this block. This keeps the equity curve
+        # gap-free and accrues cash interest for every day exactly once.
         next_rebalance_idx = min(current_idx + rebalancing_window, len(dates))
+        block_end_idx = min(next_rebalance_idx + 1, len(dates))
         holding_start_idx = execution_idx  # Start from T+1 where we executed
-        
-        if holding_start_idx < next_rebalance_idx:
-            prices_block = prices_clean.iloc[holding_start_idx:next_rebalance_idx]
+
+        if holding_start_idx < block_end_idx:
+            prices_block = prices_clean.iloc[holding_start_idx:block_end_idx]
             block_dates = prices_block.index
             
             # Vectorized Shares Value
@@ -438,17 +450,21 @@ def walk_forward_backtest(
         
         if is_cash_mode:
             # In Cash mode, Predicted Sharpe is 0 (Risk free excess return = 0)
-            # Realized Sharpe is technically infinite/undefined due to 0 vol, but we map it to 0
+            # Realized Sharpe is technically infinite/undefined due to 0 vol, but we map it to 0.
+            # The is_cash flag lets consumers EXCLUDE these degenerate (0, 0) pairs from
+            # predictive-power statistics (Spearman/regression) — a pile of identical
+            # points would otherwise artificially inflate the correlation.
             predicted_sharpe = 0.0
             realized_sharpe = 0.0
         else:
             predicted_sharpe = calculate_portfolio_sharpe_weights(train_returns, target_weights, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
             realized_sharpe = calculate_realized_sharpe_shares(period_values, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
-        
+
         overfitting_metrics.append({
             "date": current_date.strftime("%Y-%m-%d"),
             "predicted_sharpe": round(float(predicted_sharpe), 4),
-            "realized_sharpe": round(float(realized_sharpe), 4)
+            "realized_sharpe": round(float(realized_sharpe), 4),
+            "is_cash": bool(is_cash_mode)
         })
 
         # Advance
@@ -470,9 +486,6 @@ def walk_forward_backtest(
         ).ledoit_wolf()
         final_risk_contributions = calculate_risk_contributions(last_weights, cov_matrix)
 
-    # Generate Equal Weight Benchmark (reusing the logic or function)
-    benchmark_values, benchmark_turnover = get_equal_weight_benchmark(prices_clean, training_window, tickers, rebalancing_window)
-
     # Cast all weight/contribution values to native Python float for JSON serialization
     clean_weights = {k: float(v) for k, v in last_weights.items()} if last_weights else {}
     clean_risk_contributions = {k: float(v) for k, v in final_risk_contributions.items()} if final_risk_contributions else {}
@@ -481,63 +494,68 @@ def walk_forward_backtest(
     years = (len(dates) - training_window) / trading_days_per_year
     annualized_turnover_pct = total_turnover_pct / max(years, 0.01)
 
-    return (equity_curve, benchmark_values, allocation_history, 
-            rebalance_dates, clean_weights, total_transaction_costs, annualized_turnover_pct, 
-            overfitting_metrics, clean_risk_contributions, benchmark_turnover, latest_dendrogram_data)
+    return (equity_curve, allocation_history,
+            rebalance_dates, clean_weights, total_transaction_costs, annualized_turnover_pct,
+            overfitting_metrics, clean_risk_contributions, latest_dendrogram_data)
 
 
 def get_equal_weight_benchmark(
-    prices: pd.DataFrame, 
-    start_offset: int, 
+    prices: pd.DataFrame,
+    start_offset: int,
     tickers: List[str],
-    rebalancing_window: int = 21
+    rebalancing_window: int = 21,
+    transaction_cost_bps: float = 0.0
 ) -> Tuple[List[Dict], float]:
     """
     Generate Equal Weight (1/N) benchmark with periodic rebalancing and DRIFT.
-    "Honest" Equal Weight.
+    "Honest" Equal Weight: pays the SAME transaction costs as the strategies
+    (initial deployment + each rebalance), so the comparison is like-for-like.
     Returns (benchmark_curve, annualized_turnover_pct)
     """
     benchmark_values = []
-    
+    transaction_cost_pct = transaction_cost_bps / 10000.0
+
     # Work with clean data
     prices_clean = prices.apply(pd.to_numeric, errors='coerce').ffill().dropna()
     dates = prices_clean.index
-    
+
     if start_offset >= len(dates):
         return [], 0.0
 
     trading_days = infer_trading_frequency(dates)
     years = (len(dates) - start_offset) / trading_days
-    
+
     # Vectorized setup
     returns = prices_clean.pct_change().fillna(0.0)
     returns_block = returns.iloc[start_offset:]
     dates_block = dates[start_offset:]
-    
+
     n = len(tickers)
-    current_amounts = np.full(n, 1.0 / n)
+    # Initial deployment: buying 1.0 of assets costs 1.0 × cost_pct (same as strategies)
+    initial_value = 1.0 * (1.0 - transaction_cost_pct)
+    current_amounts = np.full(n, initial_value / n)
     total_turnover_pct = 0.0
-    
+
     timestamps = dates_block.astype(np.int64) // 10**6
     returns_values = returns_block[tickers].values # shape (T, N)
-    
+
     T = len(dates_block)
-    
+
     for chunk_start in range(0, T, rebalancing_window):
         chunk_end = min(chunk_start + rebalancing_window, T)
-        
+
         # Returns for this chunk
         chunk_rets = returns_values[chunk_start:chunk_end]
-        
+
         # Cumulative multipliers for the chunk
         cum_multipliers = np.cumprod(1.0 + chunk_rets, axis=0)
-        
+
         # Asset amounts over time in the chunk
         amounts_over_time = current_amounts * cum_multipliers
-        
+
         # Portfolio value over time
         total_vals = amounts_over_time.sum(axis=1)
-        
+
         # Batch append to benchmark_values
         for i in range(len(total_vals)):
             idx = chunk_start + i
@@ -545,21 +563,23 @@ def get_equal_weight_benchmark(
                 "date": float(timestamps[idx]),
                 "value": round(float(total_vals[i]), 6)
             })
-            
+
         # Rebalance at the end of the chunk (if not the last day)
         if chunk_end < T:
             end_val = total_vals[-1]
-            target_amount = end_val / n
             end_amounts = amounts_over_time[-1]
-            
+
+            # Two-sided traded value to get back to 1/N, and its cost
+            diff_sum = np.sum(np.abs(end_val / n - end_amounts))
+            cost = diff_sum * transaction_cost_pct
             if end_val > 0:
-                diff_sum = np.sum(np.abs(target_amount - end_amounts))
                 total_turnover_pct += (diff_sum / end_val) / 2.0
-                
-            current_amounts = np.full(n, target_amount)
+
+            net_val = max(end_val - cost, 0.0)
+            current_amounts = np.full(n, net_val / n)
 
     annualized_turnover = total_turnover_pct / max(years, 0.01)
-    
+
     return benchmark_values, annualized_turnover
 
 
@@ -570,15 +590,12 @@ def get_custom_benchmark(
     benchmark_ticker: str
 ) -> Tuple[List[Dict], str]:
     """
-    Fetch and return a custom benchmark ticker (e.g., SPY).
-    Aligns benchmark data with portfolio dates.
-    Uses Tiingo first (reliable), falls back to yfinance (unreliable on cloud).
+    Fetch and return a custom benchmark ticker (e.g., SPY) from Tiingo.
+    Aligns benchmark data with portfolio dates and normalizes to 1.0 at start.
+    Shown gross of costs (it represents a reference index, not a traded strategy).
     """
     benchmark_values = []
-    # Import locally to avoid circular imports if any (though currently safe)
-    # or rely on top-level import if added. 
-    # To be safe and clean, I will assume I added the import at top, 
-    # but I can also import inside here for safety.
+    # Local import to avoid a circular import at module load time
     from .data_provider import fetch_ticker_history
     
     try:

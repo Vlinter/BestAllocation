@@ -7,22 +7,18 @@ interface StressTestCardProps {
     methods: MethodResult[];
 }
 
-interface StressScenario {
-    name: string;
-    emoji: string;
-    startDate: string; // ISO date
-    endDate: string;
-    description: string;
-}
-
-const STRESS_SCENARIOS: StressScenario[] = [
-    { name: 'COVID Crash', emoji: '🦠', startDate: '2020-02-19', endDate: '2020-03-23', description: 'Pandemic market selloff' },
-    { name: 'GFC 2008', emoji: '🏦', startDate: '2008-09-15', endDate: '2009-03-09', description: 'Global Financial Crisis' },
-    { name: 'Taper Tantrum', emoji: '📉', startDate: '2013-05-22', endDate: '2013-09-05', description: 'Fed tapering shock' },
-    { name: 'China Deval 2015', emoji: '🇨🇳', startDate: '2015-08-10', endDate: '2015-08-25', description: 'Yuan devaluation selloff' },
-    { name: 'Q4 2018', emoji: '📊', startDate: '2018-10-01', endDate: '2018-12-24', description: 'Fed tightening selloff' },
-    { name: '2022 Rate Hikes', emoji: '🏛️', startDate: '2022-01-03', endDate: '2022-10-12', description: 'Aggressive Fed rate hiking' },
-];
+// Display decoration only — the numbers come from the backend, which computes
+// them on the FULL-resolution equity curve. Never recompute them here from
+// m.equity_curve: that curve is downsampled to ~500 points for display, which
+// understates intra-crisis drawdowns and misses short windows entirely.
+const SCENARIO_EMOJIS: Record<string, string> = {
+    'COVID Crash': '🦠',
+    'GFC 2008': '🏦',
+    'Taper Tantrum': '📉',
+    'China Deval 2015': '🇨🇳',
+    'Q4 2018': '📊',
+    '2022 Rate Hikes': '🏛️',
+};
 
 const METHOD_COLORS: Record<string, string> = {
     hrp: '#00D4AA',
@@ -34,42 +30,30 @@ const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
     const stressResults = useMemo(() => {
         if (!methods.length) return [];
 
-        return STRESS_SCENARIOS.map(scenario => {
-            const startTs = new Date(scenario.startDate).getTime();
-            const endTs = new Date(scenario.endDate).getTime();
+        // Collect the scenario list from the first method that has results
+        const reference = methods.find(m => (m.stress_tests?.length ?? 0) > 0);
+        if (!reference?.stress_tests) return [];
 
+        return reference.stress_tests.map(sc => {
             const methodResults: Record<string, { return: number; maxDrawdown: number; available: boolean }> = {};
 
             methods.forEach(m => {
-                // Find equity curve points within the scenario window
-                const periodPoints = m.equity_curve.filter(p => p.date >= startTs && p.date <= endTs);
-
-                if (periodPoints.length < 2) {
-                    methodResults[m.method] = { return: 0, maxDrawdown: 0, available: false };
-                    return;
-                }
-
-                const startVal = periodPoints[0].value;
-                const endVal = periodPoints[periodPoints.length - 1].value;
-                const periodReturn = (endVal - startVal) / startVal;
-
-                // Max drawdown during the period
-                let peak = periodPoints[0].value;
-                let maxDD = 0;
-                for (const p of periodPoints) {
-                    if (p.value > peak) peak = p.value;
-                    const dd = (p.value - peak) / peak;
-                    if (dd < maxDD) maxDD = dd;
-                }
-
-                methodResults[m.method] = {
-                    return: periodReturn,
-                    maxDrawdown: Math.abs(maxDD),
-                    available: true,
-                };
+                const entry = m.stress_tests?.find(s => s.name === sc.name);
+                methodResults[m.method] = entry
+                    ? { return: entry.return, maxDrawdown: entry.max_drawdown, available: entry.available }
+                    : { return: 0, maxDrawdown: 0, available: false };
             });
 
-            return { scenario, methodResults };
+            return {
+                scenario: {
+                    name: sc.name,
+                    emoji: SCENARIO_EMOJIS[sc.name] ?? '📉',
+                    startDate: sc.start,
+                    endDate: sc.end,
+                    description: sc.description,
+                },
+                methodResults,
+            };
         }).filter(r => {
             // Only show scenarios where at least one method has data
             return Object.values(r.methodResults).some(mr => mr.available);

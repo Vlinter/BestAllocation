@@ -26,45 +26,34 @@ logger = logging.getLogger(__name__)
 
 def shrink_expected_returns(mu: pd.Series, shrinkage_intensity: float = None) -> pd.Series:
     """
-    Apply James-Stein shrinkage towards the grand mean.
-    
-    Uses data-driven optimal intensity when shrinkage_intensity is None:
-        λ_JS = max(0, 1 - (p - 2) / (n × Σ(μ_i - μ̄)²))
-    where p = number of assets, n = implicit from annualized variance.
-    
-    Falls back to RETURN_SHRINKAGE_INTENSITY if data is insufficient.
-    
-    Formula: μ_shrunk = λ × grand_mean + (1-λ) × sample_mean
-    
+    James-Stein-style shrinkage of expected returns towards the grand mean:
+
+        μ_shrunk = λ × μ̄ + (1-λ) × μ
+
+    A fixed intensity λ = RETURN_SHRINKAGE_INTENSITY (0.5) is used by default.
+    Rationale: the fully data-driven James-Stein intensity requires the sampling
+    variance of each mean estimate; on ~1 year of daily data that variance is so
+    large relative to the cross-sectional dispersion of expected returns that the
+    estimator shrinks to λ≈1 (all signal discarded). A constant 0.5 keeps half the
+    signal while materially reducing estimation error — the standard pragmatic
+    compromise for mean-variance inputs.
+
     Args:
         mu: Sample mean returns (annualized)
-        shrinkage_intensity: Override intensity (0.0 = raw, 1.0 = grand mean).
-                             If None, uses data-driven estimate.
-    
+        shrinkage_intensity: Override intensity (0.0 = raw sample means,
+                             1.0 = grand mean for every asset).
+
     Returns:
         Shrunk expected returns
     """
     if len(mu) < 2:
         return mu
-    
-    p = len(mu)
-    grand_mean = mu.mean()
-    
+
     if shrinkage_intensity is None:
-        # Data-driven James-Stein intensity
-        # λ_JS = max(0, 1 - (p-2) / Σ(μ_i - μ̄)²)
-        # High dispersion (strong signal) → low λ → keep sample means
-        # Low dispersion (noise-dominated) → high λ → shrink towards grand mean
-        dispersion = ((mu - grand_mean) ** 2).sum()
-        if dispersion > 1e-10 and p > 2:
-            shrinkage_intensity = min(1.0, max(0.0, 1.0 - (p - 2) / dispersion))
-            logger.debug(f"James-Stein data-driven λ = {shrinkage_intensity:.3f}")
-        else:
-            shrinkage_intensity = RETURN_SHRINKAGE_INTENSITY
-    
-    shrunk = shrinkage_intensity * grand_mean + (1 - shrinkage_intensity) * mu
-    
-    return shrunk
+        shrinkage_intensity = RETURN_SHRINKAGE_INTENSITY
+
+    grand_mean = mu.mean()
+    return shrinkage_intensity * grand_mean + (1 - shrinkage_intensity) * mu
 
 
 class OptimizationResult:
@@ -100,31 +89,6 @@ def safe_clean_weights(weights: Dict[str, float]) -> Dict[str, float]:
         n = len(cleaned)
         cleaned = {k: 1.0 / n for k in cleaned}
     return cleaned
-
-
-def apply_weight_constraints(weights: Dict[str, float], min_weight: float, max_weight: float) -> Tuple[Dict[str, float], bool]:
-    """
-    Apply min/max constraints by clipping and renormalizing.
-    Returns the clipped weights and a flag indicating if clipping was necessary.
-    """
-    clipped = False
-    for k, v in weights.items():
-        if v < min_weight or v > max_weight:
-            clipped = True
-            break
-    
-    if not clipped:
-        return weights, False
-    
-    # Clip weights
-    clipped_weights = {k: max(min_weight, min(max_weight, v)) for k, v in weights.items()}
-    
-    # Renormalize to sum to 1
-    total = sum(clipped_weights.values())
-    if total > 0:
-        clipped_weights = {k: v / total for k, v in clipped_weights.items()}
-    
-    return clipped_weights, True
 
 
 def check_covariance_quality(cov_matrix: pd.DataFrame) -> Optional[str]:
@@ -334,7 +298,11 @@ def optimize_with_fallback(
              mu = shrink_expected_returns(mu_raw)
              
              S = risk_models.CovarianceShrinkage(returns, returns_data=True, frequency=frequency).ledoit_wolf()
-             
+
+             quality_warning = check_covariance_quality(S)
+             if quality_warning:
+                 logger.warning(f"MVO covariance quality: {quality_warning}")
+
              # Cash Strategy: If the best asset return < Risk Free Rate, go to Cash
              if mu.max() < risk_free_rate:
                  logger.info(f"MVO: Max expected return ({mu.max():.2%}) < Risk Free ({risk_free_rate:.2%}). Going to Cash.")
