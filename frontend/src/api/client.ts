@@ -83,6 +83,69 @@ export interface OverfittingMetric {
   // True when the strategy sat in cash for the period: the (0, 0) pair is a
   // placeholder and must be EXCLUDED from Spearman/regression statistics.
   is_cash?: boolean;
+  // Benchmark on the SAME window, and the resulting edge. Subtracting the
+  // benchmark removes the market regime that dominates raw Sharpe levels.
+  predicted_sharpe_ew?: number;
+  realized_sharpe_benchmark?: number;
+  predicted_edge?: number;
+  realized_edge?: number;
+}
+
+// Rank-IC of the in-sample Sharpe, WITH the ceiling that makes it readable.
+export interface PredictivePower {
+  rho: number;
+  p_value: number;
+  n: number;
+  predicted_sd: number;
+  realized_sd: number;
+  noise_sd: number;       // sampling error of a Sharpe over one holding window
+  signal_share: number;   // share of realized variance that can be signal
+  rho_ceiling: number;    // max |rho| observable even with a perfect model
+}
+
+export interface EdgeStatistics {
+  mean: number;
+  sd: number;
+  t_stat: number;
+  hit_rate: number;
+  n: number;
+}
+
+export interface SharpeComparison {
+  a: string;
+  b: string;
+  difference: number;
+  ci_low: number;
+  ci_high: number;
+  p_value: number;
+  significant: boolean;
+}
+
+export interface PBOResult {
+  pbo: number;
+  logit_mean: number;
+  n_combinations: number;
+  n_candidates: number;
+  n_splits: number;
+  in_sample_winner_share: Record<string, number>;
+}
+
+export interface DeflatedSharpe {
+  dsr: number;
+  threshold_sharpe: number;
+  observed_sharpe: number;
+  n_trials: number;
+}
+
+export interface SignificanceReport {
+  available: boolean;
+  reason?: string;
+  benchmark_name?: string;
+  n_observations: number;
+  sharpe_comparisons: SharpeComparison[];
+  pbo?: PBOResult | null;
+  deflated_sharpe: Record<string, DeflatedSharpe>;
+  bootstrap: Record<string, number>;
 }
 
 // Computed server-side on the FULL-resolution equity curve
@@ -109,6 +172,8 @@ export interface MethodResult {
   method_params?: ModelParams;
   stress_tests?: StressTestResult[];
   rolling_sharpe?: CurvePoint[];
+  predictive_power?: PredictivePower | null;
+  edge_stats?: EdgeStatistics | null;
 }
 
 export interface CorrelationMatrix {
@@ -136,6 +201,7 @@ export interface CompareResponse {
   correlation_matrix?: CorrelationMatrix;
   efficient_frontier_data?: EfficientFrontierData;
   warnings?: string[];  // Data quality or optimization warnings
+  significance?: SignificanceReport | null;
 }
 
 const apiClient = axios.create({

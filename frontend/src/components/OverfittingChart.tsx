@@ -24,6 +24,13 @@ interface Dataset {
     name: string;
     data: OverfittingMetric[];
     color: string;
+    // Computed server-side (significance.predictive_power). `ceiling` is the
+    // largest |rho| observable given the sampling error of a Sharpe measured
+    // over one holding window — the number this correlation must be read
+    // against. When it is ~0 the test cannot resolve anything and a rho near
+    // zero says nothing about the model.
+    rho?: number;
+    ceiling?: number;
 }
 
 interface OverfittingChartProps {
@@ -128,12 +135,22 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-// Get interpretation based on Spearman correlation
-const getInterpretation = (rho: number): { label: string; color: string; bg: string; icon: 'up' | 'down' | 'neutral' } => {
-    if (rho >= 0.5) return { label: 'Robust', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', icon: 'up' };
-    if (rho >= 0.3) return { label: 'Moderate', color: '#eab308', bg: 'rgba(234, 179, 8, 0.1)', icon: 'neutral' };
-    if (rho >= 0.1) return { label: 'Weak', color: '#f97316', bg: 'rgba(249, 115, 22, 0.1)', icon: 'down' };
-    return { label: 'Overfitting', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', icon: 'down' };
+// Interpretation of the rank-IC — RELATIVE to what the test can detect.
+// A rho of 0 is only evidence of overfitting if a non-zero rho was observable
+// in the first place; with a 63-day holding window it usually is not.
+const getInterpretation = (
+    rho: number,
+    ceiling?: number,
+): { label: string; color: string; bg: string; icon: 'up' | 'down' | 'neutral' } => {
+    if (ceiling !== undefined && ceiling < 0.1) {
+        return { label: 'Not measurable', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)', icon: 'neutral' };
+    }
+    const scale = ceiling && ceiling > 0.1 ? ceiling : 1;
+    const ratio = rho / scale;
+    if (ratio >= 0.5) return { label: 'Robust', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', icon: 'up' };
+    if (ratio >= 0.25) return { label: 'Moderate', color: '#eab308', bg: 'rgba(234, 179, 8, 0.1)', icon: 'neutral' };
+    if (ratio >= 0) return { label: 'Weak', color: '#f97316', bg: 'rgba(249, 115, 22, 0.1)', icon: 'down' };
+    return { label: 'Inverted', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', icon: 'down' };
 };
 
 export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) => {
@@ -151,9 +168,10 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
     // Calculate stats for each dataset (cash periods excluded from statistics)
     const datasetStats = useMemo(() => {
         return datasets.map(ds => {
-            const spearman = calculateSpearmanCorrelation(ds.data || []);
+            // Prefer the server value: scipy handles ties and returns a p-value.
+            const spearman = ds.rho !== undefined ? ds.rho : calculateSpearmanCorrelation(ds.data || []);
             const regression = calculateRegression(ds.data || []);
-            const interpretation = getInterpretation(spearman);
+            const interpretation = getInterpretation(spearman, ds.ceiling);
             const cashCount = ds.data?.filter(d => d.is_cash).length || 0;
             return {
                 name: ds.name,
@@ -172,7 +190,9 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
     const avgSpearman = datasetStats.length > 0
         ? datasetStats.reduce((acc, s) => acc + s.spearman, 0) / datasetStats.length
         : 0;
-    const overallInterpretation = getInterpretation(avgSpearman);
+    const ceilings = datasets.map(d => d.ceiling).filter((c): c is number => c !== undefined);
+    const avgCeiling = ceilings.length ? ceilings.reduce((a, b) => a + b, 0) / ceilings.length : undefined;
+    const overallInterpretation = getInterpretation(avgSpearman, avgCeiling);
 
     if (totalPoints === 0) {
         return (
@@ -451,7 +471,10 @@ export const OverfittingChart: React.FC<OverfittingChartProps> = ({ datasets }) 
                         🎯 Metrics Explained
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.6, display: 'block' }}>
-                        • <strong>Rank IC (ρ)</strong>: Spearman correlation (tie-adjusted). ρ ≥ 0.5 = robust, 0.3-0.5 = moderate, ρ ≈ 0 = random noise<br />
+                        • <strong>Rank IC (ρ)</strong>: Spearman correlation (tie-adjusted), read against the
+                        <em> detectable ceiling</em> in the table below — not against 1. A Sharpe measured over one
+                        holding window carries a sampling error close to the dispersion between windows, so the ceiling
+                        is often ~0 and ρ ≈ 0 then means <em>untestable</em>, not <em>overfit</em>.<br />
                         • <strong>Reg. Slope</strong>: How much realized Sharpe changes per unit predicted. Slope &lt; 0.5 = decay<br />
                         • <strong>Note</strong>: this is a heuristic in-house diagnostic (rank IC), not a formal PBO/Deflated-Sharpe test. With few rebalances the ρ is noisy — check the point count. Grey points = cash periods (excluded).
                     </Typography>

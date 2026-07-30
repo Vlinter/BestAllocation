@@ -19,13 +19,13 @@ const EfficientFrontierChart = lazy(() => import('../components/EfficientFrontie
 const RiskContributionChart = lazy(() => import('../components/RiskContributionChart'));
 const CorrelationHeatmap = lazy(() => import('../components/CorrelationHeatmap'));
 const ReturnsDistributionChart = lazy(() => import('../components/ReturnsDistributionChart'));
-const ModelHealthCards = lazy(() => import('../components/ModelHealthCards'));
+const SignificanceCard = lazy(() => import('../components/SignificanceCard'));
 const OverfittingChart = lazy(() => import('../components/OverfittingChart'));
 const OverfittingTable = lazy(() => import('../components/OverfittingTable'));
 const PerformanceHistogram = lazy(() => import('../components/PerformanceHistogram'));
 const RebalancerCard = lazy(() => import('../components/RebalancerCard'));
 const RollingSharpeChart = lazy(() => import('../components/RollingSharpeChart'));
-const StressTestCard = lazy(() => import('../components/StressTestCard'));
+const StressTestCard = lazy(() => import('../components/StressTestCard'));
 
 interface RankingEntry {
     method: MethodResult;
@@ -220,10 +220,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                 <ErrorBoundary>
                 <Suspense fallback={<SkeletonLoader height={300} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <ModelHealthCards methods={results.methods} />
+                        <SignificanceCard results={results} />
                         <StressTestCard methods={results.methods} />
-                        <OverfittingTable methods={results.methods} />
-                        <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({ name: m.method_name, color: m.method === 'hrp' ? '#00D4AA' : m.method === 'cvar' ? '#FFE66D' : '#A78BFA', data: m.overfitting_metrics || [] }))} />
+                        <OverfittingTable methods={results.methods} benchmarkName={results.benchmark_name} />
+                        <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({
+                            name: m.method_name,
+                            color: m.method === 'hrp' ? '#00D4AA' : m.method === 'cvar' ? '#FFE66D' : '#A78BFA',
+                            data: m.overfitting_metrics || [],
+                            rho: m.predictive_power?.rho,
+                            ceiling: m.predictive_power?.rho_ceiling,
+                        }))} />
                     </Box>
                 </Suspense>
                 </ErrorBoundary>

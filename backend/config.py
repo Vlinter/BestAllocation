@@ -42,6 +42,21 @@ TARGET_VOLATILITY = 0.12  # 12% = moderate balanced portfolio
 VOLATILITY_LOOKBACK = 63  # 3 months rolling window for vol estimation
 
 # ============================================================================
+# Statistical significance (see significance.py)
+# ============================================================================
+
+# Circular block bootstrap for Sharpe-difference confidence intervals.
+# Block length in trading days: long enough to keep the autocorrelation and
+# volatility clustering of daily returns, short enough to keep ~n/L blocks.
+BOOTSTRAP_BLOCK_LENGTH = 21   # one month
+BOOTSTRAP_RESAMPLES = 1000
+BOOTSTRAP_SEED = 20260727     # fixed: identical inputs must give identical CIs
+
+# CSCV splits for the Probability of Backtest Overfitting. 16 gives
+# C(16,8) = 12 870 in-sample/out-of-sample combinations (the paper's default).
+PBO_SPLITS = 16
+
+# ============================================================================
 # Analytics
 # ============================================================================
 

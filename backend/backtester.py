@@ -460,10 +460,21 @@ def walk_forward_backtest(
             predicted_sharpe = calculate_portfolio_sharpe_weights(train_returns, target_weights, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
             realized_sharpe = calculate_realized_sharpe_shares(period_values, risk_free_rate=period_rf_annual, annualization_factor=trading_days_per_year)
 
+        # Same-window Sharpe of the naive 1/N portfolio. The per-period "edge"
+        # (strategy minus 1/N) is what the predictive-power test actually needs:
+        # raw Sharpe levels are dominated by the market regime common to both,
+        # which is pure noise for the question "does the optimizer add value?".
+        ew_weights = {t: 1.0 / len(tickers) for t in tickers}
+        predicted_sharpe_ew = calculate_portfolio_sharpe_weights(
+            train_returns, ew_weights, risk_free_rate=period_rf_annual,
+            annualization_factor=trading_days_per_year
+        )
+
         overfitting_metrics.append({
             "date": current_date.strftime("%Y-%m-%d"),
             "predicted_sharpe": round(float(predicted_sharpe), 4),
             "realized_sharpe": round(float(realized_sharpe), 4),
+            "predicted_sharpe_ew": round(float(predicted_sharpe_ew), 4),
             "is_cash": bool(is_cash_mode)
         })
 

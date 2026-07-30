@@ -25,6 +25,9 @@ from backend.metrics import (
 )
 from backend.backtester import walk_forward_backtest, get_custom_benchmark, get_equal_weight_benchmark
 from backend.optimization import calculate_efficient_frontier
+from backend.significance import (
+    annualized_sharpe, compute_significance, edge_statistics, predictive_power
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -103,7 +106,7 @@ def _run_strategy(
     cvar_alpha: float,
     benchmark_returns: Optional[pd.Series],
     progress_callback
-) -> Optional[MethodResult]:
+) -> Optional[tuple]:
     """
     Run one strategy end-to-end.
 
@@ -115,6 +118,10 @@ def _run_strategy(
     benchmark_returns: daily returns of the benchmark the USER selected
                     (custom ticker or equal-weight), so alpha/beta are measured
                     against what is actually displayed as "Benchmark".
+
+    Returns (MethodResult, full-resolution daily returns). The second element
+    never goes to the client — it feeds the cross-strategy significance tests,
+    which must NOT run on the downsampled display curves.
     """
     try:
         (equity_curve, allocation_history, rebalance_dates,
@@ -160,6 +167,40 @@ def _run_strategy(
             annualization_factor=trading_days_per_year
         )
 
+        # --- Per-period edge over the benchmark -----------------------------
+        # The raw predicted/realized Sharpe levels share the market regime,
+        # which dominates their variance; the difference against the benchmark
+        # on the SAME window removes it and is what the diagnostic reports.
+        if benchmark_returns is not None and len(benchmark_returns) > 10:
+            bounds = [pd.Timestamp(d) for d in rebalance_dates] + [equity_series.index[-1]]
+            for i, entry in enumerate(overfitting_metrics):
+                # The strategy's realized Sharpe is measured on the closes from
+                # the execution day (T+1) onwards, so its first RETURN is that
+                # of T+2. `.iloc[1:]` drops the same leading day on the
+                # benchmark: without it the two Sharpes would not cover the
+                # same days, and on a 63-day window one day is enough to move
+                # the edge by more than its own standard error.
+                block = benchmark_returns[
+                    (benchmark_returns.index > bounds[i]) & (benchmark_returns.index <= bounds[i + 1])
+                ].iloc[1:]
+                bench_sharpe = annualized_sharpe(
+                    block.values, rf_metrics, trading_days_per_year
+                ) if len(block) >= 3 else 0.0
+                entry["realized_sharpe_benchmark"] = round(float(bench_sharpe), 4)
+                entry["predicted_edge"] = round(
+                    float(entry["predicted_sharpe"] - entry.get("predicted_sharpe_ew", 0.0)), 4)
+                entry["realized_edge"] = round(float(entry["realized_sharpe"] - bench_sharpe), 4)
+
+        # Cash periods carry degenerate (0, 0) placeholders: excluded, as always.
+        usable = [e for e in overfitting_metrics if not e.get("is_cash")]
+        power = predictive_power(
+            [e["predicted_sharpe"] for e in usable],
+            [e["realized_sharpe"] for e in usable],
+            holding_days=request.rebalancing_window,
+            annualization_factor=trading_days_per_year,
+        ) if usable else None
+        edges = edge_statistics([e.get("realized_edge", 0.0) for e in usable]) if usable else None
+
         current_alloc = CurrentAllocation(
             date=datetime.now().strftime("%Y-%m-%d"),
             weights=current_weights or {},
@@ -175,7 +216,7 @@ def _run_strategy(
         drawdown_curve_payload = downsample_curve(drawdown_curve, 500)
         rolling_sharpe_payload = downsample_curve(rolling_sharpe, 500)
 
-        return MethodResult(
+        result = MethodResult(
             method=method,
             method_name=METHOD_NAMES.get(method, method),
             equity_curve=equity_curve_payload,
@@ -186,8 +227,11 @@ def _run_strategy(
             overfitting_metrics=overfitting_metrics,
             method_params=method_params,
             stress_tests=stress_tests,
-            rolling_sharpe=rolling_sharpe_payload
+            rolling_sharpe=rolling_sharpe_payload,
+            predictive_power=power,
+            edge_stats=edges,
         )
+        return result, equity_series.pct_change().dropna()
     except Exception as e:
         logger.error(f"Error in method {method}: {e}", exc_info=True)
         return None
@@ -253,6 +297,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         cvar_alpha = 1.0 - request.cvar_confidence
         methods_to_run = ["hrp", "cvar", "mvo"]
         method_results = []
+        method_returns = {}   # full-resolution daily returns, for the significance tests
 
         # 3. Parallel Execution
         total_methods = len(methods_to_run)
@@ -294,9 +339,11 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             for future in as_completed(future_to_method):
                 method = future_to_method[future]
                 try:
-                    result = future.result()
-                    if result:
+                    outcome = future.result()
+                    if outcome:
+                        result, daily_returns = outcome
                         method_results.append(result)
+                        method_returns[result.method_name] = daily_returns
                 except Exception as exc:
                     logger.error(f"Strategy {method} generated an exception: {exc}", exc_info=True)
 
@@ -316,7 +363,24 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         )
         
         # 3. Post-Processing
-        job_manager.update_job(job_id, 85, "Calculating Correlation Matrix...")
+        job_manager.update_job(job_id, 84, "Testing statistical significance...")
+
+        # Cross-strategy tests: bootstrap CI on the Sharpe gaps, PBO (CSCV) and
+        # Deflated Sharpe. They need every candidate at once and full-resolution
+        # daily returns, hence here rather than inside a single strategy run.
+        significance = None
+        try:
+            significance = compute_significance(
+                method_returns=method_returns,
+                benchmark_returns=benchmark_returns,
+                benchmark_name=benchmark_name,
+                risk_free_rate=rf_metrics,
+                annualization_factor=trading_days_per_year,
+            )
+        except Exception as exc:
+            logger.warning(f"Significance tests failed: {exc}", exc_info=True)
+
+        job_manager.update_job(job_id, 88, "Calculating Correlation Matrix...")
         
         method_results.sort(key=lambda x: x.performance_metrics.sortino_ratio, reverse=True)
         
@@ -361,7 +425,8 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             limiting_ticker=limiting_ticker,
             correlation_matrix=correlation_matrix,
             efficient_frontier_data=efficient_frontier_data,
-            warnings=data_warnings
+            warnings=data_warnings,
+            significance=significance
         )
         
         job_manager.update_job(job_id, 100, "Optimization Complete", status="completed", result=sanitize_nan(response.dict()))
