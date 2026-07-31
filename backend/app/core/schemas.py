@@ -68,6 +68,76 @@ class OverfittingMetric(BaseModel):
     # degenerate (0, 0) placeholders and must be EXCLUDED from predictive-power
     # statistics (Spearman / regression) by consumers.
     is_cash: bool = False
+    # Same-window Sharpe of the naive 1/N portfolio (in-sample) and of the
+    # displayed benchmark (out-of-sample). The differences below are the
+    # low-noise version of the diagnostic: subtracting the benchmark removes
+    # the market regime that dominates raw Sharpe levels.
+    predicted_sharpe_ew: float = 0.0
+    realized_sharpe_benchmark: float = 0.0
+    predicted_edge: float = 0.0
+    realized_edge: float = 0.0
+
+
+class PredictivePower(BaseModel):
+    """Rank-IC of the in-sample Sharpe, WITH its detectability ceiling."""
+    rho: float
+    p_value: float
+    n: int
+    predicted_sd: float
+    realized_sd: float
+    noise_sd: float        # sampling error of a Sharpe over one holding window
+    signal_share: float    # share of realized variance that can be signal
+    rho_ceiling: float     # max |rho| observable even with a perfect model
+
+
+class EdgeStatistics(BaseModel):
+    """Per-period edge over the benchmark: mean, t-stat, hit rate."""
+    mean: float
+    sd: float
+    t_stat: float
+    hit_rate: float
+    n: int
+
+
+class SharpeComparison(BaseModel):
+    a: str
+    b: str
+    difference: float
+    ci_low: float
+    ci_high: float
+    p_value: float
+    significant: bool
+
+
+class PBOResult(BaseModel):
+    pbo: float
+    logit_mean: float
+    n_combinations: int
+    n_candidates: int
+    n_splits: int
+    in_sample_winner_share: Dict[str, float] = {}
+
+
+class DeflatedSharpe(BaseModel):
+    dsr: float
+    threshold_sharpe: float
+    observed_sharpe: float
+    n_trials: int
+
+
+class SignificanceReport(BaseModel):
+    """
+    Cross-strategy statistics: computed once every method has run, because
+    they compare candidates against each other and against the benchmark.
+    """
+    available: bool = False
+    reason: Optional[str] = None
+    benchmark_name: Optional[str] = None
+    n_observations: int = 0
+    sharpe_comparisons: List[SharpeComparison] = []
+    pbo: Optional[PBOResult] = None
+    deflated_sharpe: Dict[str, DeflatedSharpe] = {}
+    bootstrap: Dict[str, int] = {}
 
 
 class ModelParams(BaseModel):
@@ -90,6 +160,9 @@ class MethodResult(BaseModel):
     # receives downsampled curves, which must never be used for these):
     stress_tests: List[Dict[str, Any]] = []       # per historical crisis window
     rolling_sharpe: List[Dict[str, float]] = []   # rolling annualized Sharpe (display-downsampled)
+    # Statistics of the predicted-vs-realized diagnostic (see significance.py).
+    predictive_power: Optional[PredictivePower] = None
+    edge_stats: Optional[EdgeStatistics] = None
 
 
 class CompareRequest(BaseModel):
@@ -167,3 +240,5 @@ class CompareResponse(BaseModel):
     efficient_frontier_data: Optional[Dict[str, Any]] = None
     # Warnings for data quality or optimization issues
     warnings: List[str] = []
+    # Bootstrap CIs on Sharpe gaps, PBO and Deflated Sharpe (cross-strategy)
+    significance: Optional[SignificanceReport] = None

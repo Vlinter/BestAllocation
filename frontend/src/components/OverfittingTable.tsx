@@ -1,3 +1,4 @@
+import React from 'react';
 import {
     Paper,
     Typography,
@@ -16,130 +17,8 @@ import type { MethodResult } from '../api/client';
 
 interface OverfittingTableProps {
     methods: MethodResult[];
+    benchmarkName?: string;
 }
-
-interface OverfittingStats {
-    method: string;
-    methodName: string;
-    count: number;
-    // Core metrics
-    successRate: number;           // % où réalisé >= prédit
-    avgDifference: number;         // Moyenne réalisé - prédit
-    correlation: number;           // Corrélation prédit/réalisé
-    avgPredicted: number;
-    avgRealized: number;
-    // New metrics
-    medianDifference: number;      // Médiane des différences
-    stdDifference: number;         // Stabilité (écart-type des différences)
-    overfitRatio: number;          // % où réalisé < prédit * 0.5 (forte déception)
-    worstCaseRatio: number;        // Pire ratio réalisé/prédit
-    bestCaseRatio: number;         // Meilleur ratio réalisé/prédit
-    consistencyScore: number;      // % de périodes avec Sharpe réalisé > 0
-    degradationPct: number;        // % de dégradation moyenne (prédit - réalisé) / prédit
-    reliabilityScore: number;      // Score global 0-100
-}
-
-interface MetricConfig {
-    label: string;
-    key: keyof Omit<OverfittingStats, 'method' | 'methodName' | 'count'>;
-    format: (value: number) => string;
-    higherIsBetter: boolean;
-    tooltip: string;
-}
-
-const metricsConfig: MetricConfig[] = [
-    {
-        label: 'Success Rate',
-        key: 'successRate',
-        format: (v) => `${v.toFixed(1)}%`,
-        higherIsBetter: true,
-        tooltip: '% of periods where Realized ≥ Predicted Sharpe (higher = model meets expectations)'
-    },
-    {
-        label: 'Avg Δ Sharpe',
-        key: 'avgDifference',
-        format: (v) => v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2),
-        higherIsBetter: true,
-        tooltip: 'Average (Realized - Predicted). Positive = model underestimates (conservative, good!)'
-    },
-    {
-        label: 'Median Δ Sharpe',
-        key: 'medianDifference',
-        format: (v) => v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2),
-        higherIsBetter: true,
-        tooltip: 'Median difference (more robust to outliers than average)'
-    },
-    {
-        label: 'Stability (σ)',
-        key: 'stdDifference',
-        format: (v) => v.toFixed(2),
-        higherIsBetter: false,
-        tooltip: 'Std deviation of differences. Lower = more consistent predictions'
-    },
-    {
-        label: 'Correlation',
-        key: 'correlation',
-        format: (v) => v.toFixed(2),
-        higherIsBetter: true,
-        tooltip: 'Correlation between predicted and realized. Higher = more predictable'
-    },
-    {
-        label: 'Consistency',
-        key: 'consistencyScore',
-        format: (v) => `${v.toFixed(1)}%`,
-        higherIsBetter: true,
-        tooltip: '% of periods with positive realized Sharpe (model works often)'
-    },
-    {
-        label: 'Severe Overfit Rate',
-        key: 'overfitRatio',
-        format: (v) => `${v.toFixed(1)}%`,
-        higherIsBetter: false,
-        tooltip: '% of periods where Realized < 50% of Predicted (model fails badly)'
-    },
-    {
-        label: 'Degradation',
-        key: 'degradationPct',
-        format: (v) => `${v.toFixed(1)}%`,
-        higherIsBetter: false,
-        tooltip: 'Avg % loss from predicted to realized. Lower = predictions hold up'
-    },
-    {
-        label: 'Worst Case',
-        key: 'worstCaseRatio',
-        format: (v) => `${v.toFixed(1)}x`,
-        higherIsBetter: true,
-        tooltip: 'Worst realized/predicted ratio. Higher (closer to 1) = less bad surprises'
-    },
-    {
-        label: 'Best Case',
-        key: 'bestCaseRatio',
-        format: (v) => `${v.toFixed(1)}x`,
-        higherIsBetter: true,
-        tooltip: 'Best realized/predicted ratio. Shows upside potential'
-    },
-    {
-        label: 'Avg Predicted',
-        key: 'avgPredicted',
-        format: (v) => v.toFixed(2),
-        higherIsBetter: true,
-        tooltip: 'Average in-sample Sharpe (what model expects)'
-    },
-    {
-        label: 'Avg Realized',
-        key: 'avgRealized',
-        format: (v) => v.toFixed(2),
-        higherIsBetter: true,
-        tooltip: 'Average out-of-sample Sharpe (what actually happened)'
-    },
-    {
-        label: 'Reliability Score',
-        key: 'reliabilityScore',
-        format: (v) => `${v.toFixed(0)}/100`,
-        higherIsBetter: true,
-        tooltip: `Composite score: 20% Success Rate + 15% Avg Δ + 15% Stability + 15% Correlation + 15% Consistency + 10% Overfit Penalty + 10% Degradation Penalty. Score ≥65 = Reliable, 45-65 = Mixed, <45 = Overfitting`
-    },
-];
 
 const METHOD_COLORS: Record<string, string> = {
     hrp: '#00D4AA',
@@ -147,283 +26,238 @@ const METHOD_COLORS: Record<string, string> = {
     mvo: '#A78BFA',
 };
 
-const calculateStats = (method: MethodResult): OverfittingStats | null => {
-    // Exclude cash periods: their (0, 0) placeholder pairs would count as
-    // perfect predictions and skew success rate, correlation and stability.
-    const data = (method.overfitting_metrics || []).filter(d => !d.is_cash);
+interface Row {
+    label: string;
+    tooltip: string;
+    value: (m: MethodResult) => number | null;
+    format: (v: number) => string;
+    higherIsBetter?: boolean;   // undefined = no winner, the metric is descriptive
+    group?: string;
+}
 
-    if (data.length === 0) return null;
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const usable = (m: MethodResult) => (m.overfitting_metrics || []).filter(d => !d.is_cash);
 
-    const n = data.length;
-    const predicted = data.map(d => d.predicted_sharpe);
-    const realized = data.map(d => d.realized_sharpe);
-    const differences = data.map(d => d.realized_sharpe - d.predicted_sharpe);
+const ROWS: Row[] = [
+    {
+        group: 'What happened',
+        label: 'Periods analysed',
+        tooltip: 'Rebalances used, excluding periods spent in cash (their (0, 0) placeholder would be counted as a perfect prediction).',
+        value: m => m.predictive_power?.n ?? usable(m).length,
+        format: v => v.toFixed(0),
+    },
+    {
+        label: 'Avg predicted Sharpe',
+        tooltip: 'Average in-sample Sharpe of the chosen weights over the training window — what the optimizer implicitly announced.',
+        value: m => mean(usable(m).map(d => d.predicted_sharpe)),
+        format: v => v.toFixed(2),
+    },
+    {
+        label: 'Avg realized Sharpe',
+        tooltip: 'Average Sharpe actually obtained over the following holding period.',
+        value: m => mean(usable(m).map(d => d.realized_sharpe)),
+        format: v => v.toFixed(2),
+    },
+    {
+        group: 'What this test can see',
+        label: 'Realized dispersion (σ)',
+        tooltip: 'Standard deviation of the realized Sharpes across periods.',
+        value: m => m.predictive_power?.realized_sd ?? null,
+        format: v => v.toFixed(2),
+    },
+    {
+        label: 'Estimation noise (±)',
+        tooltip: 'Sampling error of an annualized Sharpe measured over a single holding window (Lo, 2002). When it matches the dispersion above, everything you see is measurement noise.',
+        value: m => m.predictive_power?.noise_sd ?? null,
+        format: v => v.toFixed(2),
+    },
+    {
+        label: 'Signal share',
+        tooltip: 'Share of the realized dispersion that cannot be explained by estimation noise — i.e. the part that could carry information.',
+        value: m => m.predictive_power?.signal_share ?? null,
+        format: v => `${(v * 100).toFixed(0)}%`,
+    },
+    {
+        label: 'Detectable |ρ| ceiling',
+        tooltip: 'Largest correlation observable EVEN IF the model were perfect, given the noise above. Compare the rank-IC to this number, never to 1.',
+        value: m => m.predictive_power?.rho_ceiling ?? null,
+        format: v => v.toFixed(2),
+    },
+    {
+        label: 'Rank-IC (Spearman ρ)',
+        tooltip: 'Rank correlation between predicted and realized Sharpe, ties handled properly. Read it against the ceiling on the line above: if the ceiling is ~0, this number carries no information about the model.',
+        value: m => m.predictive_power?.rho ?? null,
+        format: v => (v >= 0 ? '+' : '') + v.toFixed(2),
+    },
+    {
+        label: 'p-value',
+        tooltip: 'Probability of a rank correlation at least this large if predicted and realized were unrelated.',
+        value: m => m.predictive_power?.p_value ?? null,
+        format: v => v.toFixed(2),
+    },
+    {
+        group: 'Edge over the benchmark (low-noise view)',
+        label: 'Avg edge per period',
+        tooltip: 'Strategy Sharpe minus benchmark Sharpe over the SAME window. Subtracting the benchmark removes the market regime, which is the dominant noise source in the raw levels.',
+        value: m => m.edge_stats?.mean ?? null,
+        format: v => (v >= 0 ? '+' : '') + v.toFixed(3),
+        higherIsBetter: true,
+    },
+    {
+        label: 'Edge t-stat',
+        tooltip: 'Is the average edge distinguishable from zero? |t| above ~2 is the usual bar. Below that, the optimizer has not demonstrably beaten the benchmark period by period.',
+        value: m => m.edge_stats?.t_stat ?? null,
+        format: v => (v >= 0 ? '+' : '') + v.toFixed(2),
+        higherIsBetter: true,
+    },
+    {
+        label: 'Periods with positive edge',
+        tooltip: 'Share of holding periods where the strategy beat the benchmark. 50% is a coin flip.',
+        value: m => m.edge_stats?.hit_rate ?? null,
+        format: v => `${(v * 100).toFixed(0)}%`,
+        higherIsBetter: true,
+    },
+];
 
-    // Sort differences for median
-    const sortedDiff = [...differences].sort((a, b) => a - b);
-    const medianDifference = n % 2 === 0
-        ? (sortedDiff[n / 2 - 1] + sortedDiff[n / 2]) / 2
-        : sortedDiff[Math.floor(n / 2)];
+const OverfittingTable: React.FC<OverfittingTableProps> = ({ methods, benchmarkName }) => {
+    const withData = methods.filter(m => usable(m).length > 0);
+    if (withData.length === 0) return null;
 
-    // Success Rate (realized >= predicted)
-    const successCount = data.filter(d => d.realized_sharpe >= d.predicted_sharpe).length;
-    const successRate = (successCount / n) * 100;
-
-    // Averages
-    const avgPredicted = predicted.reduce((a, b) => a + b, 0) / n;
-    const avgRealized = realized.reduce((a, b) => a + b, 0) / n;
-    const avgDifference = avgRealized - avgPredicted;
-
-    // Standard deviation of differences
-    const meanDiff = differences.reduce((a, b) => a + b, 0) / n;
-    const stdDifference = Math.sqrt(differences.reduce((acc, d) => acc + Math.pow(d - meanDiff, 2), 0) / n);
-
-    // Pearson Correlation
-    const meanP = avgPredicted;
-    const meanR = avgRealized;
-    let numerator = 0, denomP = 0, denomR = 0;
-    for (let i = 0; i < n; i++) {
-        const dp = predicted[i] - meanP;
-        const dr = realized[i] - meanR;
-        numerator += dp * dr;
-        denomP += dp * dp;
-        denomR += dr * dr;
-    }
-    const correlation = (denomP > 0 && denomR > 0)
-        ? numerator / Math.sqrt(denomP * denomR)
-        : 0;
-
-    // Severe overfit ratio (realized < 50% of predicted)
-    const severeOverfitCount = data.filter(d => d.predicted_sharpe > 0 && d.realized_sharpe < d.predicted_sharpe * 0.5).length;
-    const overfitRatio = (severeOverfitCount / n) * 100;
-
-    // Ratios (for cases where predicted > 0)
-    const validRatios = data
-        .filter(d => d.predicted_sharpe > 0.1)
-        .map(d => d.realized_sharpe / d.predicted_sharpe);
-
-    const worstCaseRatio = validRatios.length > 0 ? Math.min(...validRatios) : 0;
-    const bestCaseRatio = validRatios.length > 0 ? Math.max(...validRatios) : 0;
-
-    // Consistency: % with positive realized Sharpe
-    const positiveRealizedCount = realized.filter(r => r > 0).length;
-    const consistencyScore = (positiveRealizedCount / n) * 100;
-
-    // Degradation %
-    const degradations = data
-        .filter(d => d.predicted_sharpe > 0)
-        .map(d => ((d.predicted_sharpe - d.realized_sharpe) / d.predicted_sharpe) * 100);
-    const degradationPct = degradations.length > 0
-        ? degradations.reduce((a, b) => a + b, 0) / degradations.length
-        : 0;
-
-    // Reliability Score (0-100) - improved formula
-    const successScore = Math.min(successRate, 100) * 0.20;
-    const diffScore = Math.min(Math.max((avgDifference + 2) / 4, 0), 1) * 100 * 0.15;
-    const stabilityScore = Math.max(0, 100 - stdDifference * 20) * 0.15;
-    const corrScore = Math.min(Math.max((correlation + 1) / 2, 0), 1) * 100 * 0.15;
-    const consistScore = consistencyScore * 0.15;
-    const overfitPenalty = Math.max(0, 100 - overfitRatio * 2) * 0.10;
-    const degradePenalty = Math.max(0, 100 - Math.abs(degradationPct)) * 0.10;
-    const reliabilityScore = successScore + diffScore + stabilityScore + corrScore + consistScore + overfitPenalty + degradePenalty;
-
-    return {
-        method: method.method,
-        methodName: method.method_name,
-        count: n,
-        successRate,
-        avgDifference,
-        medianDifference,
-        stdDifference,
-        correlation,
-        avgPredicted,
-        avgRealized,
-        overfitRatio,
-        worstCaseRatio,
-        bestCaseRatio,
-        consistencyScore,
-        degradationPct,
-        reliabilityScore
-    };
-};
-
-const OverfittingTable: React.FC<OverfittingTableProps> = ({ methods }) => {
-    const stats = methods
-        .map(calculateStats)
-        .filter((s): s is OverfittingStats => s !== null);
-
-    if (stats.length === 0) {
-        return null;
-    }
-
-    const getBestMethod = (key: keyof Omit<OverfittingStats, 'method' | 'methodName' | 'count'>, higherIsBetter: boolean): string => {
-        let bestMethod = '';
-        let bestValue = higherIsBetter ? -Infinity : Infinity;
-
-        stats.forEach((s) => {
-            const value = s[key] as number;
-            if (higherIsBetter ? value > bestValue : value < bestValue) {
-                bestValue = value;
-                bestMethod = s.method;
-            }
+    const bestFor = (row: Row): string | null => {
+        if (row.higherIsBetter === undefined) return null;
+        let best: string | null = null;
+        let bestValue = -Infinity;
+        withData.forEach(m => {
+            const v = row.value(m);
+            if (v === null) return;
+            if (v > bestValue) { bestValue = v; best = m.method; }
         });
-
-        return bestMethod;
+        return best;
     };
 
-    // Count wins per method
-    const winsPerMethod: Record<string, number> = {};
-    stats.forEach(s => { winsPerMethod[s.method] = 0; });
-    metricsConfig.forEach(metric => {
-        const best = getBestMethod(metric.key, metric.higherIsBetter);
-        if (best) winsPerMethod[best]++;
-    });
-
-    const getVerdict = (s: OverfittingStats): { text: string; color: string } => {
-        if (s.reliabilityScore >= 65) return { text: '✅ Reliable', color: '#10b981' };
-        if (s.reliabilityScore >= 45) return { text: '⚠️ Mixed', color: '#f59e0b' };
-        return { text: '❌ Overfitting', color: '#ef4444' };
-    };
+    const ceilingIsZero = withData.every(m => (m.predictive_power?.rho_ceiling ?? 0) < 0.05);
 
     return (
         <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                 <AnalyticsIcon sx={{ color: 'primary.main', fontSize: 28 }} />
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    Model Reliability Analysis
+                    Predicted vs Realized
                 </Typography>
             </Box>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                Comparing In-Sample (training) vs Out-of-Sample (test) to detect overfitting. Hover metrics for details.
+                At every rebalance the optimizer implicitly announces a Sharpe; here is what followed, next to the
+                precision this comparison actually has. Hover any row for the definition.
             </Typography>
+
+            {ceilingIsZero && (
+                <Box sx={{ mb: 2.5, p: 2, borderRadius: 1, bgcolor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                    <Typography variant="body2" sx={{ color: '#F59E0B', fontWeight: 600, mb: 0.5 }}>
+                        This rank correlation cannot detect anything — by construction.
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+                        A Sharpe ratio measured over a single holding window carries a sampling error as large as the
+                        dispersion between periods. The correlation is therefore attenuated to ~0 whatever the model does,
+                        and a value near zero is <em>not</em> evidence of overfitting. Use the edge rows below, and the
+                        bootstrap intervals above, to judge the strategies.
+                    </Typography>
+                </Box>
+            )}
 
             <TableContainer>
                 <Table size="small">
                     <TableHead>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Metric</TableCell>
-                            {stats.map((s) => (
+                            {withData.map(m => (
                                 <TableCell
-                                    key={s.method}
+                                    key={m.method}
                                     align="center"
                                     sx={{
                                         fontWeight: 700,
-                                        color: METHOD_COLORS[s.method],
-                                        borderBottom: `2px solid ${METHOD_COLORS[s.method]}`,
+                                        color: METHOD_COLORS[m.method],
+                                        borderBottom: `2px solid ${METHOD_COLORS[m.method]}`,
                                     }}
                                 >
-                                    {s.methodName}
+                                    {m.method_name}
                                 </TableCell>
                             ))}
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {metricsConfig.map((metric) => {
-                            const bestMethod = getBestMethod(metric.key, metric.higherIsBetter);
-
+                        {ROWS.map(row => {
+                            const best = bestFor(row);
                             return (
-                                <TableRow key={metric.key} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
-                                    <TableCell>
-                                        <Tooltip title={metric.tooltip} arrow placement="right">
-                                            <Typography variant="body2" sx={{ fontWeight: 500, cursor: 'help' }}>
-                                                {metric.label}
-                                            </Typography>
-                                        </Tooltip>
-                                    </TableCell>
-                                    {stats.map((s) => {
-                                        const value = s[metric.key] as number;
-                                        const isBest = s.method === bestMethod;
-
-                                        return (
-                                            <TableCell key={s.method} align="center">
-                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                                                    <Typography
-                                                        variant="body2"
-                                                        sx={{
-                                                            fontWeight: isBest ? 700 : 500,
-                                                            fontFamily: 'monospace',
-                                                            color: isBest ? METHOD_COLORS[s.method] : 'text.primary',
-                                                        }}
-                                                    >
-                                                        {metric.format(value)}
-                                                    </Typography>
-                                                    {isBest && (
-                                                        <Chip
-                                                            label="Best"
-                                                            size="small"
-                                                            sx={{
-                                                                height: 16,
-                                                                fontSize: '0.6rem',
-                                                                bgcolor: `${METHOD_COLORS[s.method]}30`,
-                                                                color: METHOD_COLORS[s.method],
-                                                            }}
-                                                        />
-                                                    )}
-                                                </Box>
+                                <React.Fragment key={row.label}>
+                                    {row.group && (
+                                        <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.02)' }}>
+                                            <TableCell colSpan={withData.length + 1} sx={{ py: 0.8 }}>
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{ fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'text.secondary' }}
+                                                >
+                                                    {row.group === 'Edge over the benchmark (low-noise view)' && benchmarkName
+                                                        ? `Edge over ${benchmarkName} (low-noise view)`
+                                                        : row.group}
+                                                </Typography>
                                             </TableCell>
-                                        );
-                                    })}
-                                </TableRow>
+                                        </TableRow>
+                                    )}
+                                    <TableRow sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
+                                        <TableCell>
+                                            <Tooltip title={row.tooltip} arrow placement="right">
+                                                <Typography variant="body2" sx={{ fontWeight: 500, cursor: 'help' }}>
+                                                    {row.label}
+                                                </Typography>
+                                            </Tooltip>
+                                        </TableCell>
+                                        {withData.map(m => {
+                                            const v = row.value(m);
+                                            const isBest = best === m.method;
+                                            return (
+                                                <TableCell key={m.method} align="center">
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                                        <Typography
+                                                            variant="body2"
+                                                            sx={{
+                                                                fontWeight: isBest ? 700 : 500,
+                                                                fontFamily: 'monospace',
+                                                                color: isBest ? METHOD_COLORS[m.method] : 'text.primary',
+                                                            }}
+                                                        >
+                                                            {v === null ? '—' : row.format(v)}
+                                                        </Typography>
+                                                        {isBest && (
+                                                            <Chip
+                                                                label="Best"
+                                                                size="small"
+                                                                sx={{
+                                                                    height: 16,
+                                                                    fontSize: '0.6rem',
+                                                                    bgcolor: `${METHOD_COLORS[m.method]}30`,
+                                                                    color: METHOD_COLORS[m.method],
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                </React.Fragment>
                             );
                         })}
-
-                        {/* Wins Count Row */}
-                        <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.02)' }}>
-                            <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    🏆 Total Wins
-                                </Typography>
-                            </TableCell>
-                            {stats.map((s) => (
-                                <TableCell key={s.method} align="center">
-                                    <Typography
-                                        variant="body2"
-                                        sx={{
-                                            fontWeight: 700,
-                                            color: METHOD_COLORS[s.method],
-                                        }}
-                                    >
-                                        {winsPerMethod[s.method]} / {metricsConfig.length}
-                                    </Typography>
-                                </TableCell>
-                            ))}
-                        </TableRow>
-
-                        {/* Verdict Row */}
-                        <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.04)' }}>
-                            <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                    Overall Verdict
-                                </Typography>
-                            </TableCell>
-                            {stats.map((s) => {
-                                const verdict = getVerdict(s);
-                                return (
-                                    <TableCell key={s.method} align="center">
-                                        <Typography
-                                            variant="body2"
-                                            sx={{
-                                                fontWeight: 700,
-                                                color: verdict.color,
-                                            }}
-                                        >
-                                            {verdict.text}
-                                        </Typography>
-                                    </TableCell>
-                                );
-                            })}
-                        </TableRow>
                     </TableBody>
                 </Table>
             </TableContainer>
 
-            {/* Interpretation */}
             <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255,255,255,0.02)', borderRadius: 1 }}>
                 <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                    <strong>How to interpret:</strong> Higher <em>Success Rate</em> and <em>Consistency</em> = model often delivers.
-                    Low <em>Stability (σ)</em> and <em>Degradation</em> = reliable predictions.
-                    Low <em>Severe Overfit Rate</em> = fewer bad surprises.
-                    Higher <em>Total Wins</em> = best overall performer across metrics.
+                    <strong>How to interpret:</strong> compare <em>Rank-IC</em> to the <em>detectable ceiling</em>, never
+                    to 1 — a ρ of 0.05 against a ceiling of 0.06 is a model doing as well as this test can measure.
+                    The <em>edge</em> rows are the ones with real resolving power: they remove the market regime shared by
+                    every strategy. An edge t-stat below 2 means the advantage is not established, however pretty the
+                    equity curve looks.
                 </Typography>
             </Box>
         </Paper>
@@ -431,4 +265,3 @@ const OverfittingTable: React.FC<OverfittingTableProps> = ({ methods }) => {
 };
 
 export default OverfittingTable;
-
