@@ -48,9 +48,10 @@ const IntervalBar: React.FC<{ low: number; high: number; point: number; span: nu
             <Box sx={{ position: 'relative', height: 26, width: '100%' }}>
                 {/* track */}
                 <Box sx={{ position: 'absolute', top: 12, left: 0, right: 0, height: 2, bgcolor: 'rgba(255,255,255,0.07)' }} />
-                {/* zero */}
+                {/* zero — NB: in MUI's sx a numeric width <= 1 means a PERCENTAGE
+                    (width: 1 === '100%'), so this hairline must be a string. */}
                 <Box sx={{
-                    position: 'absolute', top: 3, left: '50%', width: 1, height: 20,
+                    position: 'absolute', top: 3, left: '50%', width: '1px', height: 20,
                     bgcolor: 'rgba(255,255,255,0.35)',
                 }} />
                 {/* interval */}
@@ -136,16 +137,26 @@ const SignificanceCard: React.FC<Props> = ({ results }) => {
                 {vsBenchmark.map(c => {
                     const color = colorOf(c.a, methods);
                     return (
-                        <Box key={c.a} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '90px 1fr 190px' }, gap: 1.5, alignItems: 'center' }}>
+                        <Box key={c.a} sx={{
+                            display: 'grid',
+                            // The right-hand column is content-sized (`auto`) and the bar takes
+                            // what is left: a fixed width there pushes the verdict chip outside
+                            // the card as soon as the numbers or the locale get wider.
+                            gridTemplateColumns: { xs: '1fr', sm: '84px minmax(0, 1fr) auto' },
+                            gap: 1.5, alignItems: 'center',
+                        }}>
                             <Typography variant="body2" sx={{ fontWeight: 700, color }}>
                                 {shortOf(c.a, methods)}
                             </Typography>
                             <IntervalBar low={c.ci_low} high={c.ci_high} point={c.difference} span={span} color={color} />
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: { sm: 'flex-end' } }}>
-                                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                            <Box sx={{
+                                display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
+                                justifyContent: { sm: 'flex-end' },
+                            }}>
+                                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                                     {c.difference >= 0 ? '+' : ''}{c.difference.toFixed(3)}
                                 </Typography>
-                                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                                     [{c.ci_low.toFixed(2)}, {c.ci_high.toFixed(2)}]
                                 </Typography>
                                 <Chip
