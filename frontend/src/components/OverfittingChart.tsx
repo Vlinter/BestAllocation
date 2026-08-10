@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Box, Paper, Typography, Chip, Tooltip as MuiTooltip } from '@mui/material';
 import { Info as InfoIcon } from '@mui/icons-material';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface OverfittingMetric {
     date: string;
@@ -103,9 +104,9 @@ const calculateRegression = (data: OverfittingMetric[]): { slope: number; interc
     return { slope: isNaN(slope) ? 1 : slope, intercept: isNaN(intercept) ? 0 : intercept };
 };
 
-const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-        const data = payload[0].payload;
+const CustomTooltip = ({ active, payload }: ChartTooltipProps<OverfittingMetric>) => {
+    const data = payload?.[0]?.payload;
+    if (active && data) {
         const diff = data.realized_sharpe - data.predicted_sharpe;
         return (
             <Paper sx={{ p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>

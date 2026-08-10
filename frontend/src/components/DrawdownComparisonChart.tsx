@@ -13,6 +13,7 @@ import { Box, Paper, Typography, Chip } from '@mui/material';
 import { format } from 'date-fns';
 import { downsampleSeries } from '../utils/chartUtils';
 import type { MethodResult } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface DrawdownComparisonChartProps {
     methods: MethodResult[];
@@ -49,14 +50,14 @@ const DrawdownComparisonChart: React.FC<DrawdownComparisonChartProps> = React.me
 
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
+    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+        if (active && payload && payload.length && label != null) {
             return (
                 <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
                         {format(new Date(label), 'MMM dd, yyyy')}
                     </Typography>
-                    {payload.map((entry: any, index: number) => (
+                    {payload.map((entry, index) => (
                         <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
                             <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: entry.color }} />
                             <Typography variant="body2" sx={{ flex: 1, fontSize: '0.8rem' }}>
@@ -67,10 +68,10 @@ const DrawdownComparisonChart: React.FC<DrawdownComparisonChartProps> = React.me
                                 sx={{
                                     fontWeight: 600,
                                     fontFamily: 'monospace',
-                                    color: entry.value < -20 ? 'error.main' : entry.value < -10 ? 'warning.main' : 'text.primary',
+                                    color: (entry.value ?? 0) < -20 ? 'error.main' : (entry.value ?? 0) < -10 ? 'warning.main' : 'text.primary',
                                 }}
                             >
-                                {entry.value.toFixed(2)}%
+                                {(entry.value ?? 0).toFixed(2)}%
                             </Typography>
                         </Box>
                     ))}

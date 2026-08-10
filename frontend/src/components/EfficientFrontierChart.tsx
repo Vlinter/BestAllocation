@@ -15,9 +15,23 @@ import {
 import { Paper, Typography, Box, Chip, Button, Collapse, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { BubbleChart, Circle, ExpandMore, ExpandLess, TrendingUp, ShowChart, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { CompareResponse } from '../api/client';
+import type { ChartTooltipProps, ChartShapeProps } from '../types/charts';
 
 interface EfficientFrontierChartProps {
     data: CompareResponse;
+}
+
+/** A point plotted on the risk/return plane: asset, strategy, benchmark or simulation. */
+interface FrontierPoint {
+    x: number;
+    y: number;
+    z?: number;
+    name?: string;
+    method?: string;
+    sharpe?: number;
+    sortino?: number;
+    maxDrawdown?: number;
+    isTangency?: boolean;
 }
 
 const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
@@ -123,9 +137,9 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
     }, [curveData, strategyData, simData, data.risk_free_rate]);
 
     // Custom Tooltip
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length) {
-            const point = payload[0].payload;
+    const CustomTooltip = ({ active, payload }: ChartTooltipProps<FrontierPoint>) => {
+        const point = payload?.[0]?.payload;
+        if (active && point) {
             const isStrategy = point.sharpe !== undefined && point.method !== undefined;
             const isBenchmark = point.name === data.benchmark_name;
             const isAsset = point.name && !isStrategy && !isBenchmark;
@@ -255,9 +269,9 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
     };
 
     // Custom star shape for strategies
-    const StrategyStar = (props: any) => {
+    const StrategyStar = (props: ChartShapeProps<{ method?: string }>) => {
         const { cx, cy, payload } = props;
-        const style = METHOD_STYLES[payload.method] || METHOD_STYLES.hrp;
+        const style = METHOD_STYLES[payload?.method ?? ''] || METHOD_STYLES.hrp;
 
         return (
             <g>
@@ -273,13 +287,13 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
     };
 
     // Asset shape
-    const AssetDot = (props: any) => {
+    const AssetDot = (props: ChartShapeProps<{ name?: string }>) => {
         const { cx, cy, payload } = props;
         return (
             <g>
                 <circle cx={cx} cy={cy} r={6} fill="#64748B" stroke="#94A3B8" strokeWidth={1.5} opacity={0.9} />
-                <text x={cx} y={cy - 12} textAnchor="middle" fill="#94A3B8" fontSize={9} fontWeight={600}>
-                    {payload.name}
+                <text x={cx} y={(cy ?? 0) - 12} textAnchor="middle" fill="#94A3B8" fontSize={9} fontWeight={600}>
+                    {payload?.name}
                 </text>
             </g>
         );

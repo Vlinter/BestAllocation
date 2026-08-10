@@ -13,6 +13,15 @@ import {
 } from 'recharts';
 import { BarChart as BarChartIcon, CalendarMonth, DateRange } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
+
+/** One bar of the performance histogram (a month or a year). */
+interface HistogramBar {
+    label: string;
+    value: number;
+    year?: number;
+}
+
 
 interface PerformanceHistogramProps {
     methods: MethodResult[];
@@ -124,10 +133,10 @@ const PerformanceHistogram: React.FC<PerformanceHistogramProps> = React.memo(({ 
     }, [method, viewMode]);
 
     // Custom tooltip
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (!active || !payload || !payload[0]) return null;
+    const CustomTooltip = ({ active, payload }: ChartTooltipProps<HistogramBar>) => {
+        const data = payload?.[0]?.payload;
+        if (!active || !data) return null;
 
-        const data = payload[0].payload;
         const value = data.value;
         const isPositive = value >= 0;
 
