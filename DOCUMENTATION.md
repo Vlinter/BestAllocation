@@ -469,6 +469,148 @@ Turnover_annual = Σ(Turnover_events) / years
 
 ---
 
+## 🔬 Tests de Significativité
+
+**Fichier:** `backend/significance.py` — calculés une fois les 3 stratégies terminées, sur les rendements
+quotidiens **pleine résolution** (jamais sur les courbes sous-échantillonnées d'affichage).
+
+> [!IMPORTANT]
+> Un classement sans barres d'erreur est un tirage au sort avec des décimales. Ces quatre tests
+> répondent à la seule question qui compte : **l'écart observé dépasse-t-il la précision de l'instrument ?**
+
+---
+
+### 1. Intervalle de confiance sur l'écart de Sharpe (bootstrap par blocs circulaires)
+
+**Problème:** le Sharpe est une statistique bruitée. Comparer 0,79 et 0,66 sans marge d'erreur n'a pas de sens.
+
+**Méthode:** ré-échantillonnage par **blocs circulaires** de 21 séances (Politis & Romano, 1992), 1 000 tirages.
+
+```
+Pour b = 1..1000:
+    tirer des blocs de 21 jours (avec rebouclage) jusqu'à couvrir T jours
+    appliquer les MÊMES indices aux deux séries
+    ΔSharpe_b = Sharpe(série A) − Sharpe(série B)
+IC 95% = [percentile_2.5(ΔSharpe), percentile_97.5(ΔSharpe)]
+```
+
+**Deux points d'implémentation qui changent le résultat:**
+- **Blocs, pas jours isolés:** les rendements sont autocorrélés et la volatilité arrive en grappes.
+  Tirer jour par jour casserait cette structure et donnerait un intervalle trop étroit — donc trop optimiste.
+- **Mêmes blocs pour les deux séries:** les stratégies vivent les mêmes krachs. Les ré-échantillonner
+  indépendamment détruirait leur corrélation et gonflerait artificiellement la variance de l'écart.
+
+**Graine fixe:** deux exécutions sur les mêmes données donnent le même intervalle.
+
+**Lecture:** si l'intervalle **contient zéro**, « aucune différence » reste une explication possible → non concluant.
+
+---
+
+### 2. PBO — Probability of Backtest Overfitting (CSCV)
+
+**Source:** Bailey, Borwein, López de Prado & Zhu (2016) — *The Probability of Backtest Overfitting*
+
+**Question:** si je n'avais eu que la moitié de l'historique pour désigner un gagnant, ce gagnant tiendrait-il
+sur l'autre moitié ?
+
+**Méthode (Combinatorially Symmetric Cross-Validation):**
+```
+1. Découper la série en S = 16 blocs de taille égale
+2. Pour chacune des C(16, 8) = 12 870 combinaisons:
+       IS  = les 8 blocs choisis        OOS = les 8 blocs restants
+       n*  = stratégie de meilleur Sharpe en IS
+       ω   = rang relatif de n* dans le classement OOS  ∈ [0, 1]
+       λ   = logit(ω)
+3. PBO = P(λ ≤ 0) = fraction des cas où le gagnant IS finit sous la médiane OOS
+```
+
+**Implémentation:** les 12 870 combinaisons sont vectorisées via des **statistiques suffisantes par bloc**
+(somme et somme des carrés par bloc), ce qui évite de recalculer les Sharpe à chaque combinaison.
+
+**Lecture:** `50%` = choisir le gagnant d'un backtest ne vaut pas mieux qu'un tirage au sort ·
+`< 25%` = sélection robuste · `0%` = le gagnant est un vrai gagnant.
+
+---
+
+### 3. Deflated Sharpe Ratio
+
+**Source:** Bailey & López de Prado (2014) — *The Deflated Sharpe Ratio*
+
+**Problème:** si l'on compare assez de stratégies, la meilleure aura l'air brillante par pure chance.
+Le Sharpe observé doit être corrigé du **nombre d'essais**.
+
+```
+SR₀ = E[max Sharpe sous H₀] ≈ σ_SR · [ (1−γ)·Φ⁻¹(1 − 1/N) + γ·Φ⁻¹(1 − 1/(N·e)) ]
+
+DSR = Φ ( (SR − SR₀) · √(T−1)  /  √(1 − γ₃·SR + (γ₄−1)/4 · SR²) )
+```
+
+Où `N` = nombre d'essais, `γ` = constante d'Euler-Mascheroni, `γ₃` = asymétrie, `γ₄` = kurtosis,
+`T` = nombre d'observations.
+
+**Ce que la formule corrige:** le nombre de candidats comparés, l'asymétrie négative et l'épaisseur des queues —
+trois raisons pour lesquelles un Sharpe brut flatte la réalité.
+
+**Lecture:** probabilité que le vrai Sharpe soit > 0. Au-dessus de **95%**, crédible.
+
+---
+
+### 4. Pouvoir prédictif et son plafond de détectabilité
+
+**Le rank-IC de Spearman est conservé, mais il n'est plus affiché seul.**
+
+Un ratio de Sharpe annualisé estimé sur une seule fenêtre de détention de 63 jours porte une erreur
+d'échantillonnage de (Lo, 2002) :
+
+```
+σ(SR_annualisé) ≈ √( (1 + SR²/2) / n_périodes )  × √(252/63)  ≈  ±2,0
+```
+
+Or la dispersion observée des Sharpe réalisés d'une période à l'autre est de **1,86 à 1,99**. La part de signal
+est donc nulle : **la corrélation est mécaniquement atténuée vers 0 quoi que fasse le modèle.**
+
+Le backend renvoie donc, à côté du ρ, le **plafond** `ρ_max` atteignable compte tenu de ce bruit.
+Quand le plafond est nul, l'interface affiche **« Non mesurable »** au lieu de « Overfitting ».
+
+> [!WARNING]
+> Un ρ ≈ 0 n'était pas une preuve de sur-apprentissage — c'était la preuve que le test ne pouvait
+> rien résoudre. C'est la raison pour laquelle le score composite « Reliability » (pondérations
+> 20/15/15/15/15/10/10 inventées) a été supprimé.
+
+---
+
+### 5. L'avantage sur le benchmark (`edge_statistics`)
+
+**Reformulation la plus utile:** au lieu de comparer des *niveaux* de Sharpe, on mesure l'**écart** avec le
+benchmark sur exactement la même fenêtre.
+
+**Pourquoi:** quand le marché s'effondre, toutes les stratégies souffrent ensemble. Ce régime commun est la
+principale source de bruit. Le soustraire fait tomber la dispersion de ~1,9 à **0,6-1,0** — deux à trois fois
+moins de bruit, donc un test bien plus sensible.
+
+**Sortie:** moyenne de l'avantage, écart-type, statistique `t` et `p` (test de Student apparié).
+Règle du pouce : `|t| > 2` pour commencer à y croire.
+
+---
+
+### Ce que les tests disent sur l'univers par défaut
+
+*6 ETF (QQQ, VGK, VWO, GLD, SLV, TLT), 2006-2026, 77 rebalancements:*
+
+| Résultat | Valeur | Lecture |
+|----------|--------|---------|
+| DSR des 3 stratégies | 98,8% à 99,8% | ✅ Elles battent réellement le cash |
+| Meilleur écart (MVO − 1/N) | +0,225 · IC [−0,02 ; +0,48] · p = 0,074 | ❌ Non significatif |
+| MVO − HRP | +0,133 · p = 0,39 | ❌ Impossible à départager |
+| PBO | 36% | ⚠️ 1 fois sur 3, le champion se serait trompé |
+| Plafond du rank-IC | ~0 | — Non mesurable à 63 jours |
+
+**Conclusion honnête:** les trois stratégies créent de la valeur par rapport au cash, aucune ne se distingue
+statistiquement des autres ni du simple équipondéré. Le choix doit donc se faire sur ce qui se mesure sans
+ambiguïté — perte maximale, rotation, frais — et non sur la première place du podium.
+
+---
+
 ## 🔧 Paramètres Utilisateur
 
 | Paramètre | Description | Défaut |
@@ -519,6 +661,7 @@ backend/
 ├── optimization.py        # Algorithmes HRP, Min-CVaR, MVO
 ├── backtester.py          # Moteur walk-forward + benchmarks
 ├── metrics.py             # Métriques, stress tests, rolling Sharpe
+├── significance.py        # Bootstrap, PBO/CSCV, Deflated Sharpe, plafond du rank-IC
 ├── config.py              # Constantes
 └── data_provider.py       # Données (Tiingo + FRED, cache joblib)
 
@@ -547,7 +690,8 @@ frontend/
 | Risk Contribution | Qui apporte le risque |
 | Monthly Returns | Saisonnalité des performances |
 | Returns Distribution | Forme des rendements (normalité) |
-| Overfitting Chart | Predicted vs Realized Sharpe |
+| Overfitting Chart | Predicted vs Realized Sharpe, avec le plafond de détectabilité |
+| Significance Card | Intervalles de confiance sur les écarts de Sharpe, PBO, DSR |
 
 ---
 
@@ -561,7 +705,8 @@ frontend/
 6. **CVaR à petit échantillon:** ~13 observations de queue à 95%/252 jours — estimation instable (voir la section Min-CVaR)
 7. **Corrélations non-stationnaires:** Les corrélations entre actifs changent dans le temps, surtout en période de crise
 8. **Biais de survivance:** Seuls les tickers existants aujourd'hui sont testables
-9. **Diagnostic d'overfitting heuristique:** rank-IC de Spearman prédit/réalisé (périodes cash exclues) — ce n'est ni le PBO/CSCV de Bailey & López de Prado, ni le Deflated Sharpe Ratio
+9. **Tests de significativité en petit échantillon:** avec les fenêtres par défaut (252/63), 20 ans d'historique ne donnent que 77 périodes. Le PBO tourne sur 16 splits et les intervalles de bootstrap restent larges — les tests sont honnêtes sur l'incertitude, ils ne la suppriment pas
+10. **Rank-IC non mesurable sur fenêtre courte:** le pouvoir prédictif du Sharpe in-sample est rapporté avec son plafond de détectabilité, qui est nul à 63 jours (voir la section « Tests de significativité ») — lire le plafond avant de lire le ρ
 
 ---
 
@@ -574,4 +719,8 @@ frontend/
 - Artzner, P., Delbaen, F., Eber, J.-M., & Heath, D. (1999). *Coherent Measures of Risk*
 - Ledoit, O., & Wolf, M. (2004). *Honey, I Shrunk the Sample Covariance Matrix*
 - James, W., & Stein, C. (1961). *Estimation with Quadratic Loss* (Shrinkage Estimators)
+- Politis, D., & Romano, J. (1992). *A Circular Block-Resampling Procedure for Stationary Data*
+- Lo, A. (2002). *The Statistics of Sharpe Ratios* (erreur d'échantillonnage du Sharpe)
+- Bailey, D., & López de Prado, M. (2014). *The Deflated Sharpe Ratio*
+- Bailey, D., Borwein, J., López de Prado, M., & Zhu, Q. (2016). *The Probability of Backtest Overfitting*
 - PyPortfolioOpt Documentation: https://pyportfolioopt.readthedocs.io/

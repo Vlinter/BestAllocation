@@ -1,12 +1,25 @@
 # Revue produit — BestAllocation comme outil réel d'allocation
 
-> **STATUT (2026-07-07) : corrigé.** Tous les points 🔴 (R1-R7) et 🟠 (I1, I3-I7)
-> ci-dessous ont été traités sur la branche `fix/review-roadmap`, avec tests de
-> non-régression (pytest 20/20, dont un test discriminant CVaR-vs-min-variance sur
-> rendements asymétriques) et CI GitHub Actions. I2 (CVaR ~13 obs de queue) est une
-> limite intrinsèque, désormais documentée dans le README et DOCUMENTATION.md.
-> Ce document est conservé comme trace d'audit ; les détails ci-dessous décrivent
-> l'état AVANT correction.
+> **STATUT (2026-08-10) : intégralement corrigé.**
+>
+> - **🔴 R1-R7 et 🟠 I1, I3-I7** — traités le 2026-07-07 (branche `fix/review-roadmap`),
+>   avec tests de non-régression et CI GitHub Actions. I2 (CVaR ~13 obs de queue) est une
+>   limite intrinsèque, désormais documentée dans le README et DOCUMENTATION.md.
+> - **🟡 Mineurs** — tous traités depuis : jour de décision réintégré dans l'equity curve,
+>   dernier rebalancement borné proprement, code mort supprimé (`apply_weight_constraints`,
+>   `MIN_POINTS_FOR_RELIABLE_SHARPE`) et `check_covariance_quality` désormais **appelé**,
+>   constantes `DEFAULT_*` de `config.py` supprimées (le schéma Pydantic est la source unique —
+>   plus de désynchronisation 21 vs 63 jours), `debug_output.txt` retiré et `.gitignore` complété,
+>   commentaire `linkage` corrigé, `test_audit.py` désémojisé (plus de crash cp1252),
+>   README réécrit avec la bonne commande de démarrage.
+> - **R6 (diagnostic d'overfitting)** — le correctif de juillet se limitait à exclure les
+>   périodes cash. Le 2026-07-30, le rank-IC a été **remplacé** par une vraie suite de tests
+>   (bootstrap par blocs, PBO/CSCV, Deflated Sharpe Ratio) et le « Reliability Score » maison
+>   supprimé. Voir `backend/significance.py` et la section correspondante de DOCUMENTATION.md.
+>   L'incohérence d'affichage du seuil ρ a disparu avec la réécriture du composant.
+>
+> Suite de tests actuelle : **36 tests**, tous hors-ligne. Ce document est conservé comme
+> trace d'audit ; les détails ci-dessous décrivent l'état **AVANT** correction.
 
 **Date :** 2026-07-06
 **Angle :** est-ce que je peux **me fier aux chiffres affichés** et utiliser ce site pour mes propres décisions d'allocation ? Où sont les erreurs, qu'est-ce qui est réellement bon, et quelles améliorations apporteraient le plus de valeur ?

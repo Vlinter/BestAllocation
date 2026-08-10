@@ -8,7 +8,7 @@ BestAllocation is a full-stack web application that compares three portfolio all
 
 1. Fetches historical adjusted prices from the **Tiingo API** (single data source, cached on disk) and the risk-free rate from **FRED** (3-month T-Bill, falls back to a constant 4.5% if unavailable).
 2. Runs a **walk-forward backtest** for the three strategies in parallel: optimize on a rolling training window (default 252 days), hold for a rebalancing window (default 63 days), repeat — using only data available at each decision point.
-3. Computes **16+ performance metrics** (Sharpe, Sortino, Max Drawdown, Calmar, Omega, alpha/beta vs your chosen benchmark…), **historical stress tests**, a **rolling Sharpe**, and an **overfitting diagnostic**.
+3. Computes **16+ performance metrics** (Sharpe, Sortino, Max Drawdown, Calmar, Omega, alpha/beta vs your chosen benchmark…), **historical stress tests**, a **rolling Sharpe**, and a **statistical significance suite** — bootstrap confidence intervals on every Sharpe gap, Probability of Backtest Overfitting, and Deflated Sharpe Ratio.
 4. Displays everything in an interactive React dashboard, including a rebalancer that converts your actual holdings into concrete trade instructions.
 
 ## 🧠 The three strategies
@@ -45,12 +45,31 @@ Either **Equal Weight (1/N)** — rebalanced on the same schedule and paying the
 | Annualization | Auto-detected: 252 (stocks) or 365 (crypto-only portfolios) |
 | Full-resolution analytics | Stress tests and rolling Sharpe are computed server-side on the daily curve; the UI only receives downsampled curves for display |
 
-**Honesty features:** survivorship-bias warning on every run, per-period `fallback` flags when an optimizer failed, cash periods excluded from the overfitting statistics, and an overfitting diagnostic that is explicitly labeled as a heuristic rank-IC (not a formal PBO/Deflated-Sharpe test).
+**Honesty features:** survivorship-bias warning on every run, per-period `fallback` flags when an optimizer failed, cash periods excluded from the predictive-power statistics, a confidence interval on every Sharpe gap (see below), and a dashboard that prints **"inconclusive"** when the data does not support a winner — which, on most universes, is what it prints.
+
+## 📐 Statistical validation — does the winner actually win?
+
+A ranking without error bars is a coin toss with decimals. Once the three strategies and the benchmark have run, the backend computes four tests on the **full-resolution daily returns** — never on the downsampled display curves (`backend/significance.py`):
+
+| Test | The question it answers | Method |
+|---|---|---|
+| **Bootstrap CI on the Sharpe gap** | Is the gap between two strategies real, or inside the noise? | Circular block bootstrap, 21-day blocks, 1 000 resamples. Both series are resampled with the **same** blocks so their correlation survives. Fixed seed: identical inputs give identical intervals. |
+| **PBO** — Probability of Backtest Overfitting | Would my podium hold on other years? | CSCV (Bailey, Borwein, López de Prado & Zhu, 2016): 16 splits → 12 870 train/test combinations, vectorised through per-block sufficient statistics. |
+| **Deflated Sharpe Ratio** | Does this strategy really beat cash, given that I compared several candidates? | Bailey & López de Prado (2014), correcting for the number of trials, skew and kurtosis. |
+| **Rank-IC + detectability ceiling** | Does the in-sample Sharpe predict the next one? | Spearman rank-IC, reported **with the ceiling** implied by the sampling error of a Sharpe estimated over a single holding window (Lo, 2002). |
+
+**What the tests say on the default universe** (6 ETFs, 2006-2026, 77 rebalances):
+
+- All three strategies beat cash credibly — **DSR between 98.8% and 99.8%**.
+- **None of them beats the others, or 1/N, at the 5% level.** Every confidence interval crosses zero; the best candidate (MVO − Equal Weight) is **+0.225** Sharpe with a CI of **[−0.02, +0.48]**, p = 0.074.
+- **PBO = 36%**: one time in three, the strategy that won on half the history would have landed in the bottom half of the other.
+
+The rank-IC used to be the *only* overfitting diagnostic. It is now reported with its ceiling — which turns out to be **nil** on 63-day windows: an annualized Sharpe estimated over one holding period carries a sampling error of ≈ ±2.0, while the observed dispersion across periods is 1.86-1.99. A ρ near zero was never evidence of overfitting; it was evidence that the test could not resolve anything.
 
 ## 🏗️ Architecture
 
 ```
-frontend/  React 19 + TypeScript + Vite + MUI v6 + Recharts (SPA)
+frontend/  React 19 + TypeScript + Vite + MUI v7 + Recharts (SPA)
 backend/   Python 3.11 + FastAPI
   ├── main.py                 # app entry, CORS, IP rate limiting (XFF-aware)
   ├── app/api/routes.py       # endpoints, job orchestration, parallel strategy runs
@@ -59,8 +78,9 @@ backend/   Python 3.11 + FastAPI
   ├── optimization.py         # HRP, Min-CVaR, MVO + shrinkage
   ├── backtester.py           # walk-forward engine, benchmarks
   ├── metrics.py              # performance metrics, stress tests, rolling Sharpe
+  ├── significance.py         # bootstrap CIs, PBO/CSCV, Deflated Sharpe, rank-IC ceiling
   ├── data_provider.py        # Tiingo + FRED fetching, joblib disk cache
-  └── config.py               # constants (stress scenarios, shrinkage intensity…)
+  └── config.py               # constants (stress scenarios, shrinkage, bootstrap settings…)
 ```
 
 The API is asynchronous: `POST /api/compare/start` returns a `job_id`; the frontend polls `GET /api/jobs/{job_id}` for progress (0-100%) and results. `GET /api/health` and `GET /api/version` are available for monitoring. Rate limiting: 5 comparisons/min/IP.
@@ -98,7 +118,12 @@ pip install -r backend/requirements-dev.txt
 pytest backend -q                  # offline — no API keys needed
 ```
 
-The suite includes a discriminating tail-risk test: on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50). CI runs the backend tests and the frontend type-check/build on every PR.
+**36 tests**, all offline. Two of them carry most of the weight:
+
+- a discriminating tail-risk test — on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50);
+- the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows).
+
+CI runs the backend tests and the frontend type-check/build on every PR.
 
 ### Docker / production
 
@@ -124,7 +149,8 @@ Multi-stage build: the React app is compiled and served directly by FastAPI (SPA
 - **Long-only**, no leverage.
 - **Survivorship bias** — you pick today's tickers; delisted assets aren't in the universe.
 - **CVaR small-sample tail** — ~13 tail observations at 95%/252d (see above).
-- **Overfitting diagnostic is a heuristic** — a Spearman rank-IC on predicted vs realized Sharpe per period, not Bailey & López de Prado's PBO/CSCV nor the Deflated Sharpe Ratio; with few rebalances the correlation is noisy.
+- **The significance tests have their own small-sample limits** — with the default 252/63 windows a 20-year backtest yields 77 periods, so the PBO uses 16 splits and the bootstrap intervals stay wide. They are honest about uncertainty, not a substitute for more data.
+- **The rank-IC is not measurable on short holding windows** — reported with its ceiling precisely for that reason; read the ceiling before reading the ρ.
 - Past performance ≠ future results. This is a research tool, not financial advice.
 
 ## 📚 References
@@ -135,5 +161,9 @@ Multi-stage build: the React app is compiled and served directly by FastAPI (SPA
 - Michaud (1989) — *The Markowitz Optimization Enigma*
 - Artzner, Delbaen, Eber, Heath (1999) — *Coherent Measures of Risk*
 - Rockafellar & Uryasev (2000) — *Optimization of Conditional Value-at-Risk*
+- Politis & Romano (1992) — *A Circular Block-Resampling Procedure for Stationary Data*
+- Lo (2002) — *The Statistics of Sharpe Ratios*
 - Ledoit & Wolf (2004) — *Honey, I Shrunk the Sample Covariance Matrix*
+- Bailey & López de Prado (2014) — *The Deflated Sharpe Ratio*
+- Bailey, Borwein, López de Prado & Zhu (2016) — *The Probability of Backtest Overfitting*
 - López de Prado (2016) — *Building Diversified Portfolios that Outperform Out-of-Sample*
