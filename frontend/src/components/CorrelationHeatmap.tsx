@@ -2,11 +2,12 @@ import React from 'react';
 import { Box, Paper, Typography, Tooltip } from '@mui/material';
 import { Info as InfoIcon } from '@mui/icons-material';
 import type { CorrelationMatrix } from '../api/client';
+import type { DendrogramData } from '../types/charts';
 import DendrogramChart from './DendrogramChart';
 
 interface CorrelationHeatmapProps {
     data: CorrelationMatrix;
-    dendrogramData?: any;
+    dendrogramData?: DendrogramData;
 }
 
 // Color scale: -1 (red) to 0 (white) to +1 (green)

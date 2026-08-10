@@ -14,6 +14,18 @@ import {
 } from 'recharts';
 import { ShowChart, TrendingUp, TrendingDown, Warning } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
+
+/** One point of the histogram + fitted gaussian overlay. */
+interface DistributionPoint {
+    x: number;
+    frequency: number;
+    type: 'bin' | 'edge';
+    count?: number;
+    binStart?: number;
+    binEnd?: number;
+}
+
 
 interface ReturnsDistributionChartProps {
     methods: MethodResult[];
@@ -120,7 +132,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
             return pdf * scaleFactor;
         };
 
-        const chartData: any[] = [];
+        const chartData: DistributionPoint[] = [];
 
         // Left tail edge points (for smooth curve start)
         for (let i = 3; i >= 1; i--) {
@@ -169,11 +181,11 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
         };
     }, [method]);
 
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length) {
-            const data = payload[0].payload;
+    const CustomTooltip = ({ active, payload }: ChartTooltipProps<DistributionPoint>) => {
+        const data = payload?.[0]?.payload;
+        if (active && data) {
 
-            if (data.type === 'bin' && data.binStart !== undefined) {
+            if (data.type === 'bin' && data.binStart !== undefined && data.binEnd !== undefined) {
                 return (
                     <Paper
                         sx={{
@@ -201,22 +213,6 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                 );
             }
 
-            if (data.type === 'curve' && data.frequency !== undefined) {
-                return (
-                    <Paper
-                        sx={{
-                            p: 1.5,
-                            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            backdropFilter: 'blur(10px)',
-                        }}
-                    >
-                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                            Normal: {(data.x * 100).toFixed(2)}%
-                        </Typography>
-                    </Paper>
-                );
-            }
         }
         return null;
     };
@@ -443,7 +439,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                             maxBarSize={60}
                             radius={[4, 4, 0, 0]}
                         >
-                            {chartData.map((entry: any, index: number) => {
+                            {chartData.map((entry, index) => {
                                 if (entry.type === 'bin' && entry.count !== undefined) {
                                     const fill = entry.x >= 0 ? 'url(#barGradientPositive)' : 'url(#barGradientNegative)';
                                     return (

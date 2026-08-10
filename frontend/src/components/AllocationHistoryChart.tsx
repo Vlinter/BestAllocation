@@ -3,6 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Re
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import type { AllocationEntry } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface AllocationHistoryChartProps {
     allocationHistory: AllocationEntry[];
@@ -46,20 +47,20 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
         });
     }, [allocationHistory, tickers, showPercentage]);
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
         if (active && payload && payload.length) {
             return (
                 <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
                         {label}
                     </Typography>
-                    {payload.map((entry: any, index: number) => (
+                    {payload.map((entry, index) => (
                         <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                             <Typography variant="body2" sx={{ color: entry.color }}>
                                 {entry.name}
                             </Typography>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                {showPercentage ? `${entry.value.toFixed(1)}%` : entry.value.toFixed(4)}
+                                {showPercentage ? `${(entry.value ?? 0).toFixed(1)}%` : (entry.value ?? 0).toFixed(4)}
                             </Typography>
                         </Box>
                     ))}

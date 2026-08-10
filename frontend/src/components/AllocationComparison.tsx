@@ -3,6 +3,7 @@ import { Box, Paper, Typography, Table, TableBody, TableCell, TableContainer, Ta
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Today as TodayIcon } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface AllocationComparisonProps {
     methods: MethodResult[];
@@ -45,7 +46,8 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
 
         // 2. Create data points for each asset
         const data = Array.from(allAssets).map(asset => {
-            const point: any = { name: asset };
+            const point: { name: string; maxWeight: number;[method: string]: string | number } =
+                { name: asset, maxWeight: 0 };
             methods.forEach(method => {
                 if (asset === 'CASH') {
                     const totalWeight = Object.values(method.current_allocation.weights).reduce((sum, w) => sum + w, 0);
@@ -57,7 +59,7 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
                 }
             });
             // Calculate max weight for sorting
-            point.maxWeight = Math.max(...methods.map(m => point[m.method] || 0));
+            point.maxWeight = Math.max(...methods.map(m => Number(point[m.method] ?? 0)));
             return point;
         });
 
@@ -66,7 +68,7 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
     }, [methods]);
 
     // Custom Tooltip
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
         if (active && payload && payload.length) {
             return (
                 <Paper
@@ -79,14 +81,14 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
                     }}
                 >
                     <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>{label}</Typography>
-                    {payload.map((entry: any) => (
+                    {payload.map((entry) => (
                         <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                             <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: entry.fill }} />
                             <Typography variant="body2" sx={{ color: '#ccc', minWidth: 60 }}>
-                                {METHOD_DETAILS[entry.name]?.label.split(' ')[0] || entry.name}:
+                                {METHOD_DETAILS[entry.name ?? '']?.label.split(' ')[0] || entry.name}:
                             </Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700, color: '#fff' }}>
-                                {entry.value.toFixed(1)}%
+                                {(entry.value ?? 0).toFixed(1)}%
                             </Typography>
                         </Box>
                     ))}

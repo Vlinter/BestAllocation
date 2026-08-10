@@ -3,6 +3,7 @@ import { Box, Paper, Typography, Chip } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Label } from 'recharts';
 import { Today as TodayIcon, TrendingUp, TrendingDown } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface AllocationPieChartsProps {
     methods: MethodResult[];
@@ -34,8 +35,9 @@ const METHOD_COLORS: Record<string, { primary: string; glow: string; gradient: s
 };
 
 const AllocationPieCharts: React.FC<AllocationPieChartsProps> = React.memo(({ methods, date }) => {
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length) {
+    const CustomTooltip = ({ active, payload }: ChartTooltipProps<{ fill?: string }>) => {
+        const slice = payload?.[0];
+        if (active && slice) {
             return (
                 <Paper
                     sx={{
@@ -47,13 +49,13 @@ const AllocationPieCharts: React.FC<AllocationPieChartsProps> = React.memo(({ me
                     }}
                 >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: payload[0].payload.fill }} />
+                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: slice.payload?.fill }} />
                         <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                            {payload[0].name}
+                            {slice.name}
                         </Typography>
                     </Box>
-                    <Typography variant="h5" sx={{ color: payload[0].payload.fill, fontWeight: 800, mt: 0.5 }}>
-                        {(payload[0].value * 100).toFixed(1)}%
+                    <Typography variant="h5" sx={{ color: slice.payload?.fill, fontWeight: 800, mt: 0.5 }}>
+                        {((slice.value ?? 0) * 100).toFixed(1)}%
                     </Typography>
                 </Paper>
             );
@@ -107,7 +109,7 @@ const AllocationPieCharts: React.FC<AllocationPieChartsProps> = React.memo(({ me
                                 value: weight,
                                 fill: COLORS[index % COLORS.length],
                             }))
-                            .sort((a, b) => b.value - a.value),
+                            .sort((a, b) => (b.value ?? 0) - (a.value ?? 0)),
                         [method.current_allocation.weights]
                     );
 
@@ -235,7 +237,7 @@ const AllocationPieCharts: React.FC<AllocationPieChartsProps> = React.memo(({ me
                                             {entry.name}
                                         </Typography>
                                         <Typography variant="caption" sx={{ color: '#888', fontSize: '0.7rem' }}>
-                                            {(entry.value * 100).toFixed(0)}%
+                                            {((entry.value ?? 0) * 100).toFixed(0)}%
                                         </Typography>
                                     </Box>
                                 ))}

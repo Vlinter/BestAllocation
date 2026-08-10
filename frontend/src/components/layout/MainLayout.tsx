@@ -3,13 +3,15 @@ import { Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
 import { Menu as MenuIcon, Help as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
 import Sidebar from '../Sidebar'; // Adjust path if needed
 import AnimatedBackground from '../AnimatedBackground'; // Adjust path if needed
+import type { CompareResponse } from '../../api/client';
+import type { OptimizationParams } from '../../hooks/useOptimization';
 
 interface MainLayoutProps {
     children: React.ReactNode;
     isLoading: boolean;
     error: string | null;
-    results: any; // Type properly if possible
-    onOptimize: (params: any) => Promise<void>;
+    results: CompareResponse | null;
+    onOptimize: (params: OptimizationParams) => Promise<void>;
     sidebarMode: 'hidden' | 'normal' | 'fullscreen';
     setSidebarMode: (mode: 'hidden' | 'normal' | 'fullscreen') => void;
     onToggleDocs: () => void;

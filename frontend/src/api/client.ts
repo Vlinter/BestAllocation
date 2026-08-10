@@ -1,4 +1,7 @@
 import axios from 'axios';
+import type { DendrogramData } from '../types/charts';
+
+export type { DendrogramData };
 
 // Use relative URL in production (same origin), localhost in development
 const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8000/api';
@@ -67,7 +70,7 @@ export interface CurrentAllocation {
   constraints_clipped?: boolean;  // True if HRP weights were clipped to meet constraints
   fallback_used?: boolean;  // True if optimization failed and fell back to Equal Weight
   fallback_reason?: string;  // Reason for fallback if used
-  dendrogram_data?: any;  // Specific to method (e.g. HRP used this, NCO does not)
+  dendrogram_data?: DendrogramData;  // Specific to method (HRP produces one, the others do not)
 
 }
 

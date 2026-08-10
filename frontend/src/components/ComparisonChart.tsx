@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import React, { useState, useMemo } from 'react';
 import type { CurvePoint, MethodResult } from '../api/client';
 import { TrendingUp, ShowChart } from '@mui/icons-material';
+import type { ChartTooltipProps } from '../types/charts';
 
 interface ComparisonChartProps {
     methods: MethodResult[];
@@ -65,9 +66,9 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');
     const formatValue = (value: number) => `$${value.toFixed(2)}`;
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            const sorted = [...payload].sort((a, b) => b.value - a.value);
+    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+        if (active && payload && payload.length && label != null) {
+            const sorted = [...payload].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
             return (
                 <Paper
                     sx={{
@@ -82,7 +83,7 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
                     <Typography variant="caption" sx={{ color: '#888', display: 'block', mb: 1.5, fontSize: '0.75rem' }}>
                         {format(new Date(label), 'MMMM dd, yyyy')}
                     </Typography>
-                    {sorted.map((entry: any, index: number) => (
+                    {sorted.map((entry, index) => (
                         <Box
                             key={index}
                             sx={{
@@ -109,17 +110,17 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
                                 {entry.name}
                             </Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.9rem' }}>
-                                {formatValue(entry.value)}
+                                {formatValue(entry.value ?? 0)}
                             </Typography>
                             <Chip
-                                label={`${entry.value >= 1 ? '+' : ''}${((entry.value - 1) * 100).toFixed(1)}%`}
+                                label={`${(entry.value ?? 0) >= 1 ? '+' : ''}${(((entry.value ?? 0) - 1) * 100).toFixed(1)}%`}
                                 size="small"
                                 sx={{
                                     height: 20,
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
-                                    bgcolor: entry.value >= 1 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                    color: entry.value >= 1 ? '#10B981' : '#EF4444',
+                                    bgcolor: (entry.value ?? 0) >= 1 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                    color: (entry.value ?? 0) >= 1 ? '#10B981' : '#EF4444',
                                 }}
                             />
                         </Box>

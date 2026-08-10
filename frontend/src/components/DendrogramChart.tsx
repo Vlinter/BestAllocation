@@ -1,12 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Box, Typography, Paper, Chip } from '@mui/material';
 
-interface DendrogramData {
-    icoord: number[][];
-    dcoord: number[][];
-    ivl: string[];
-    leaves: number[];
-}
+import type { DendrogramData } from '../types/charts';
 
 interface DendrogramChartProps {
     data: DendrogramData;
