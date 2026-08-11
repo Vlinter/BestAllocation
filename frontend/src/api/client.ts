@@ -138,6 +138,9 @@ export interface DeflatedSharpe {
   threshold_sharpe: number;
   observed_sharpe: number;
   n_trials: number;
+  skewness: number;
+  kurtosis: number;        // excess, same convention as PerformanceMetrics
+  tail_adjustment: number; // DSR points attributable to skew + fat tails
 }
 
 export interface SignificanceReport {

@@ -9,8 +9,11 @@ Run from the repo root:  pytest backend -q
 """
 import sys
 import os
+import math
+import pytest
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -210,3 +213,39 @@ def test_annualized_sharpe_matches_manual_computation():
     r = _series(0.0005, 0.01, n=1000, seed=61).values
     expected = (r - 0.02 / 252).mean() / (r - 0.02 / 252).std(ddof=1) * np.sqrt(252)
     assert abs(annualized_sharpe(r, 0.02) - expected) < 1e-9
+
+
+def test_dsr_reports_the_moments_it_corrects_for():
+    """The moments used in the denominator must be returned, in the app's
+    convention (excess kurtosis), so the UI can show what the correction cost."""
+    from scipy.stats import skew as sp_skew, kurtosis as sp_kurt
+    rng = np.random.default_rng(7)
+    n = 3000
+    crash = rng.random(n) < 0.02
+    r = np.where(crash, rng.normal(-0.05, 0.01, n), rng.normal(0.0012, 0.008, n))
+    out = deflated_sharpe_ratio(r, 0.0, [0.05, 0.05], 2)
+
+    assert out["skewness"] == pytest.approx(float(sp_skew(r)), abs=1e-3)
+    # excess kurtosis, i.e. 0 for a normal distribution
+    assert out["kurtosis"] == pytest.approx(float(sp_kurt(r, fisher=True)), abs=1e-3)
+    assert out["skewness"] < 0 and out["kurtosis"] > 0          # fat left tail
+
+
+def test_tail_adjustment_is_negative_for_a_fat_left_tail_and_nil_for_gaussian():
+    """A negative skew must lower the verdict; a clean gaussian must not move it."""
+    rng = np.random.default_rng(11)
+    n = 3000
+    trials = [0.05, 0.05]
+
+    gaussian = rng.normal(0.0006, 0.01, n)
+    g = deflated_sharpe_ratio(gaussian, 0.0, trials, 2)
+    assert abs(g["tail_adjustment"]) < 0.5      # percentage points: essentially nil
+
+    crash = rng.random(n) < 0.03
+    skewed = np.where(crash, rng.normal(-0.05, 0.01, n), rng.normal(0.0015, 0.008, n))
+    s = deflated_sharpe_ratio(skewed, 0.0, trials, 2)
+    assert s["tail_adjustment"] < 0             # the correction penalises, never flatters
+    # and the reported figure reconciles with the two DSR values it separates
+    assert s["dsr"] * 100 - s["tail_adjustment"] == pytest.approx(
+        norm.cdf((s["observed_sharpe"] / math.sqrt(252) - s["threshold_sharpe"] / math.sqrt(252))
+                 * math.sqrt(len(skewed) - 1)) * 100, abs=0.05)

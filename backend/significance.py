@@ -246,11 +246,25 @@ def deflated_sharpe_ratio(
     if denom <= 0:
         return None
     dsr = float(norm.cdf((sr_d - sr0) * math.sqrt(T - 1) / math.sqrt(denom)))
+
+    # What the non-normality correction is actually worth here. Both moments enter
+    # the denominator scaled by the PER-PERIOD Sharpe, so on daily data (sr_d ~ 0.04)
+    # the adjustment is second-order; it only bites on coarser frequencies or on
+    # genuinely high-Sharpe series. Reporting it keeps the claim honest in both
+    # directions: the correction is applied, and it is usually negligible.
+    dsr_normal = float(norm.cdf((sr_d - sr0) * math.sqrt(T - 1)))
     return {
         "dsr": round(dsr, 4),
         "threshold_sharpe": round(sr0 * math.sqrt(annualization_factor), 4),
         "observed_sharpe": round(sr_d * math.sqrt(annualization_factor), 4),
         "n_trials": n_trials,
+        # Excess kurtosis, to match the convention used everywhere else in the app
+        # (metrics.calculate_metrics); the formula above uses the non-excess form.
+        "skewness": round(g3, 4),
+        "kurtosis": round(g4 - 3.0, 4),
+        # Percentage points of DSR attributable to skew + fat tails (negative = the
+        # correction lowered the verdict).
+        "tail_adjustment": round((dsr - dsr_normal) * 100, 4),
     }
 
 
