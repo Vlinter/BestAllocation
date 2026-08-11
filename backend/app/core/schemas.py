@@ -163,6 +163,9 @@ class MethodResult(BaseModel):
     # receives downsampled curves, which must never be used for these):
     stress_tests: List[Dict[str, Any]] = []       # per historical crisis window
     rolling_sharpe: List[Dict[str, float]] = []   # rolling annualized Sharpe (display-downsampled)
+    # Month-boundary returns of the FULL curve: the distribution card bins these
+    # rather than rebuilding them from the downsampled display curve.
+    monthly_returns: List[float] = []
     # Statistics of the predicted-vs-realized diagnostic (see significance.py).
     predictive_power: Optional[PredictivePower] = None
     edge_stats: Optional[EdgeStatistics] = None

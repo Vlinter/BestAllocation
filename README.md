@@ -43,7 +43,7 @@ Either **Equal Weight (1/N)** — rebalanced on the same schedule and paying the
 | Turnover smoothing | New weights blended 75/25 with previous ones (reduces churn; deliberately not renormalized so strategies can glide to cash) |
 | Mixed calendars | Crypto (24/7) and stocks (5d/week) are intersected on common trading days — no stale forward-filled weekend prices polluting correlations |
 | Annualization | Auto-detected: 252 (stocks) or 365 (crypto-only portfolios) |
-| Full-resolution analytics | Stress tests and rolling Sharpe are computed server-side on the daily curve; the UI only receives downsampled curves for display |
+| Full-resolution analytics | Stress tests, rolling Sharpe and the monthly return distribution are computed server-side on the daily curve; the UI only receives downsampled curves for display |
 
 **Honesty features:** survivorship-bias warning on every run, per-period `fallback` flags when an optimizer failed, cash periods excluded from the predictive-power statistics, a confidence interval on every Sharpe gap (see below), and a dashboard that prints **"inconclusive"** when the data does not support a winner — which, on most universes, is what it prints.
 

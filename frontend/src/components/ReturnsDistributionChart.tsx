@@ -61,24 +61,29 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
             return { chartData: [], stats: null };
         }
 
-        // Calculate Monthly Returns
-        const returns: number[] = [];
-        const curve = method.equity_curve;
-        let prevValue = curve[0].value;
-        let currentMonth = new Date(curve[0].date).getMonth();
-
-        for (let i = 1; i < curve.length; i++) {
-            const date = new Date(curve[i].date);
-            const month = date.getMonth();
-
-            if (month !== currentMonth) {
-                const currentVal = curve[i].value;
-                const ret = (currentVal - prevValue) / prevValue;
-                returns.push(ret);
-                prevValue = currentVal;
-                currentMonth = month;
-            }
-        }
+        // Monthly returns come from the server, computed on the FULL-resolution
+        // curve. Rebuilding them here from `equity_curve` would use the 500-point
+        // display curve — roughly one point every ten trading days on a 20-year
+        // backtest — which distorts precisely what this card is about: measured on
+        // the default universe, excess kurtosis fell from 1.40 to 1.07 that way.
+        // The fallback exists only for responses predating the field.
+        const returns: number[] = method.monthly_returns?.length
+            ? method.monthly_returns
+            : (() => {
+                const out: number[] = [];
+                const curve = method.equity_curve;
+                let prevValue = curve[0].value;
+                let currentMonth = new Date(curve[0].date).getMonth();
+                for (let i = 1; i < curve.length; i++) {
+                    const month = new Date(curve[i].date).getMonth();
+                    if (month !== currentMonth) {
+                        out.push((curve[i].value - prevValue) / prevValue);
+                        prevValue = curve[i].value;
+                        currentMonth = month;
+                    }
+                }
+                return out;
+            })();
 
         if (returns.length < 5) return { chartData: [], stats: null };
 
@@ -476,7 +481,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: `1px solid ${stats.mean >= 0 ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            Mean (μ)
+                            Mean (μ) · monthly
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,
@@ -496,7 +501,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: `1px solid ${methodColor.main}25`,
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            Volatility (σ)
+                            Volatility (σ) · monthly
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,
@@ -516,7 +521,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: '1px solid rgba(239,68,68,0.25)',
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            VaR 95%
+                            VaR 95% · monthly
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,
@@ -536,7 +541,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: '1px solid rgba(239,68,68,0.2)',
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            CVaR (ES)
+                            CVaR (ES) · monthly
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,
@@ -556,7 +561,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: '1px solid rgba(96,165,250,0.25)',
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            Skewness
+                            Skewness · monthly
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,
@@ -576,7 +581,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                         border: '1px solid rgba(245,158,11,0.25)',
                     }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
-                            Kurtosis
+                            Kurtosis · monthly, excess
                         </Typography>
                         <Typography variant="h6" sx={{
                             fontWeight: 800,

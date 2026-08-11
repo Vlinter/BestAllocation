@@ -178,6 +178,8 @@ export interface MethodResult {
   method_params?: ModelParams;
   stress_tests?: StressTestResult[];
   rolling_sharpe?: CurvePoint[];
+  /** Month-boundary returns computed server-side on the full-resolution curve. */
+  monthly_returns?: number[];
   predictive_power?: PredictivePower | null;
   edge_stats?: EdgeStatistics | null;
 }
