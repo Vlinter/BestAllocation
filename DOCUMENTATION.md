@@ -553,6 +553,16 @@ trois raisons pour lesquelles un Sharpe brut flatte la réalité.
 
 **Lecture:** probabilité que le vrai Sharpe soit > 0. Au-dessus de **95%**, crédible.
 
+> [!NOTE]
+> **Ce que la correction de queue vaut réellement.** L'asymétrie et le kurtosis entrent au dénominateur
+> multipliés par le Sharpe **par période**. Sur des données quotidiennes ce Sharpe vaut ~0,04, donc la
+> correction est du second ordre. L'interface affiche désormais son montant à côté de chaque DSR
+> (`tail_adjustment`, en points de pourcentage) pour que le lecteur voie à la fois qu'elle est appliquée
+> **et** qu'elle est ici négligeable — sur l'univers par défaut : −0,045 pt (HRP), −0,036 pt (Min-CVaR),
+> −0,056 pt (MVO). Le MVO écope de la plus forte, ce qui est cohérent avec son profil de queue
+> (asymétrie −1,30, kurtosis 20,1). La correction ne devient déterminante que sur des fréquences plus
+> grossières (mensuel) ou pour une stratégie à Sharpe élevé.
+
 ---
 
 ### 4. Pouvoir prédictif et son plafond de détectabilité

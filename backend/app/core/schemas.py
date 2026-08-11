@@ -123,6 +123,9 @@ class DeflatedSharpe(BaseModel):
     threshold_sharpe: float
     observed_sharpe: float
     n_trials: int
+    skewness: float = 0.0          # of the daily returns
+    kurtosis: float = 0.0          # excess, same convention as PerformanceMetrics
+    tail_adjustment: float = 0.0   # DSR points attributable to skew + fat tails
 
 
 class SignificanceReport(BaseModel):

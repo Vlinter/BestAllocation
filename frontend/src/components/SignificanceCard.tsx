@@ -246,9 +246,13 @@ const SignificanceCard: React.FC<Props> = ({ results }) => {
                                         </Typography>
                                     </Box>
                                     <Meter value={d.dsr} threshold={0.95} color={d.dsr >= 0.95 ? GOOD : WARN} />
-                                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block' }}>
                                         Sharpe {d.observed_sharpe.toFixed(2)} vs a {d.threshold_sharpe.toFixed(2)} bar
                                         {' '}set by {d.n_trials} trials
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block', opacity: 0.75 }}>
+                                        tail correction {d.tail_adjustment >= 0 ? '+' : ''}{d.tail_adjustment.toFixed(2)} pt
+                                        {' '}· skew {d.skewness.toFixed(2)} · excess kurtosis {d.kurtosis.toFixed(1)}
                                     </Typography>
                                 </Box>
                             );
