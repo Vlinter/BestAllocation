@@ -126,3 +126,37 @@ def test_last_day_decision_is_not_traded():
     )
     curve_dates = pd.Index(pd.to_datetime([e["date"] for e in equity_curve], unit="ms"))
     assert curve_dates.duplicated().sum() == 0
+
+
+def test_monthly_returns_use_month_end_values_not_sampled_points():
+    """
+    The distribution card bins these. Computing them from the 500-point display
+    curve instead of the full one distorts every tail statistic it shows, so the
+    function must (a) key on calendar month ends and (b) be unaffected by how
+    many intra-month points the curve carries.
+    """
+    from backend.metrics import calculate_monthly_returns
+
+    # Three months, deliberately uneven daily sampling inside each one.
+    idx = (list(pd.date_range("2020-01-01", "2020-01-31", freq="D"))
+           + list(pd.date_range("2020-02-01", "2020-02-29", freq="2D"))
+           + list(pd.date_range("2020-03-01", "2020-03-31", freq="D")))
+    values = np.linspace(1.0, 1.30, len(idx))
+    curve = [{"date": float(pd.Timestamp(d).value // 10**6), "value": float(v)}
+             for d, v in zip(idx, values)]
+
+    rets = calculate_monthly_returns(curve)
+    assert len(rets) == 2                      # 3 month ends -> 2 returns
+
+    # Reproduce from the month-end values themselves
+    s = pd.Series(values, index=pd.DatetimeIndex(idx))
+    expected = s.resample("ME").last().pct_change().dropna().tolist()
+    assert rets == [round(e, 6) for e in expected]
+
+    # Dropping every other point must not change the month-end anchors that survive
+    thinned = curve[::2]
+    thin_rets = calculate_monthly_returns(thinned)
+    assert len(thin_rets) == 2
+
+    assert calculate_monthly_returns([]) == []
+    assert calculate_monthly_returns(curve[:1]) == []

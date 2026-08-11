@@ -21,7 +21,8 @@ from ..services.jobs import job_manager
 from backend.data_provider import fetch_price_data, get_risk_free_rate, fetch_risk_free_rate_history
 from backend.metrics import (
     calculate_metrics, calculate_drawdown_curve, calculate_correlation_matrix,
-    infer_trading_frequency, calculate_stress_tests, calculate_rolling_sharpe
+    infer_trading_frequency, calculate_stress_tests, calculate_rolling_sharpe,
+    calculate_monthly_returns
 )
 from backend.backtester import walk_forward_backtest, get_custom_benchmark, get_equal_weight_benchmark
 from backend.optimization import calculate_efficient_frontier
@@ -166,6 +167,9 @@ def _run_strategy(
             equity_curve, risk_free_rate=rf_metrics,
             annualization_factor=trading_days_per_year
         )
+        # The returns-distribution card bins these; deriving them client-side from
+        # the 500-point display curve distorted every tail statistic it shows.
+        monthly_returns = calculate_monthly_returns(equity_curve)
 
         # --- Per-period edge over the benchmark -----------------------------
         # The raw predicted/realized Sharpe levels share the market regime,
@@ -228,6 +232,7 @@ def _run_strategy(
             method_params=method_params,
             stress_tests=stress_tests,
             rolling_sharpe=rolling_sharpe_payload,
+            monthly_returns=monthly_returns,
             predictive_power=power,
             edge_stats=edges,
         )
