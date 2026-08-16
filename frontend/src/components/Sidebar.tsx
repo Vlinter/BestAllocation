@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Box,
     TextField,
@@ -49,6 +49,26 @@ export interface OptimizationParams {
     cvarConfidence: number;
 }
 
+/**
+ * Mirror of the Pydantic bounds in backend/app/core/schemas.py (CompareRequest).
+ *
+ * The form used to allow values the API rejects — a training window down to 20
+ * against a `ge=60` schema, an unlimited ticker list against `max_length=30`,
+ * free-form ticker text against a strict pattern. Every one of those produced a
+ * 422, and a 422 used to blank the whole app. The schema stays the source of
+ * truth; these are the same numbers, enforced before the request leaves.
+ */
+const LIMITS = {
+    tickers: { min: 2, max: 30 },
+    trainingWindow: { min: 60, max: 1260 },
+    rebalancingWindow: { min: 5, max: 126 },
+    transactionCostBps: { min: 0, max: 100 },
+    minWeight: { min: 0, max: 50 },
+    maxWeight: { min: 10, max: 100 },
+} as const;
+
+const TICKER_RE = /^[A-Z0-9.-]{1,12}$/;
+
 const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFullscreen = false }) => {
     const [tickerInput, setTickerInput] = useState('');
     const [tickers, setTickers] = useState<string[]>(['QQQ', 'VGK', 'VWO', 'GLD', 'SLV', 'TLT']);
@@ -68,37 +88,82 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     const [targetVolatility, setTargetVolatility] = useState(12); // 12%
     const [cvarConfidence, setCvarConfidence] = useState(95); // 95%
 
-    // Automatically adjust maxWeight when tickers change
+    // Max weight follows the ticker count (1.5x equal weight) until the user
+    // sets it themselves — it used to silently overwrite a manual choice on
+    // every ticker added or removed.
+    const [maxWeightTouched, setMaxWeightTouched] = useState(false);
     useEffect(() => {
+        if (maxWeightTouched) return;
         const n = tickers.length;
         if (n > 0) {
             const recommendedMax = Math.min(100, Math.ceil((100 / n) * 1.5 / 5) * 5);
             setMaxWeight(recommendedMax);
         }
-    }, [tickers.length]);
+    }, [tickers.length, maxWeightTouched]);
 
     // Custom toggle states
     const [isCustomTraining, setIsCustomTraining] = useState(false);
     const [isCustomRebalancing, setIsCustomRebalancing] = useState(false);
+    const [tickerError, setTickerError] = useState<string | null>(null);
 
     const handleAddTicker = () => {
         const ticker = tickerInput.trim().toUpperCase();
-        if (ticker && !tickers.includes(ticker)) {
-            setTickers([...tickers, ticker]);
-            setTickerInput('');
+        if (!ticker) return;
+        if (!TICKER_RE.test(ticker)) {
+            setTickerError(`"${ticker}" is not a valid ticker (1-12 chars: letters, digits, '.', '-')`);
+            return;
         }
+        if (tickers.includes(ticker)) {
+            setTickerError(`${ticker} is already in the list`);
+            return;
+        }
+        if (tickers.length >= LIMITS.tickers.max) {
+            setTickerError(`At most ${LIMITS.tickers.max} tickers`);
+            return;
+        }
+        setTickers([...tickers, ticker]);
+        setTickerInput('');
+        setTickerError(null);
     };
 
     const handleRemoveTicker = (tickerToRemove: string) => {
         setTickers(tickers.filter((t) => t !== tickerToRemove));
+        setTickerError(null);
     };
 
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleAddTicker();
     };
 
+    /**
+     * The same rules the API enforces, checked before the request leaves so an
+     * out-of-range field produces an inline message instead of a 422.
+     */
+    const paramError = useMemo<string | null>(() => {
+        const n = tickers.length;
+        if (n < LIMITS.tickers.min) return `At least ${LIMITS.tickers.min} tickers required`;
+        if (n > LIMITS.tickers.max) return `At most ${LIMITS.tickers.max} tickers`;
+        if (!Number.isFinite(trainingWindow) || trainingWindow < LIMITS.trainingWindow.min || trainingWindow > LIMITS.trainingWindow.max)
+            return `Training window must be between ${LIMITS.trainingWindow.min} and ${LIMITS.trainingWindow.max} days`;
+        if (!Number.isFinite(rebalancingWindow) || rebalancingWindow < LIMITS.rebalancingWindow.min || rebalancingWindow > LIMITS.rebalancingWindow.max)
+            return `Rebalancing window must be between ${LIMITS.rebalancingWindow.min} and ${LIMITS.rebalancingWindow.max} days`;
+        if (!Number.isFinite(transactionCostBps) || transactionCostBps < LIMITS.transactionCostBps.min || transactionCostBps > LIMITS.transactionCostBps.max)
+            return `Transaction cost must be between ${LIMITS.transactionCostBps.min} and ${LIMITS.transactionCostBps.max} bps`;
+        if (minWeight < LIMITS.minWeight.min || minWeight > LIMITS.minWeight.max)
+            return `Min weight must be between ${LIMITS.minWeight.min}% and ${LIMITS.minWeight.max}%`;
+        if (maxWeight < LIMITS.maxWeight.min || maxWeight > LIMITS.maxWeight.max)
+            return `Max weight must be between ${LIMITS.maxWeight.min}% and ${LIMITS.maxWeight.max}%`;
+        if (minWeight > maxWeight) return 'Min weight cannot exceed max weight';
+        if (benchmarkType === 'custom' && benchmarkTicker.trim() && !TICKER_RE.test(benchmarkTicker.trim().toUpperCase()))
+            return `"${benchmarkTicker}" is not a valid benchmark ticker`;
+        if (!useFullHistory && startDate && endDate && startDate >= endDate)
+            return 'Start date must be before end date';
+        return null;
+    }, [tickers.length, trainingWindow, rebalancingWindow, transactionCostBps,
+        minWeight, maxWeight, benchmarkType, benchmarkTicker, useFullHistory, startDate, endDate]);
+
     const handleSubmit = () => {
-        if (tickers.length < 2) return;
+        if (paramError) return;
         onOptimize({
             tickers,
             startDate: useFullHistory ? null : startDate,
@@ -214,8 +279,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         size="small"
                         placeholder="Add ticker..."
                         value={tickerInput}
-                        onChange={(e) => setTickerInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
+                        onChange={(e) => { setTickerInput(e.target.value); setTickerError(null); }}
+                        onKeyDown={handleKeyDown}
+                        error={!!tickerError}
                         sx={{ flex: 1 }}
                     />
                     <IconButton onClick={handleAddTicker} color="primary" sx={{ bgcolor: 'rgba(0, 212, 170, 0.1)' }}>
@@ -238,11 +304,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         />
                     ))}
                 </Box>
-                {tickers.length < 2 && (
+                {tickerError && (
                     <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-                        At least 2 tickers required
+                        {tickerError}
                     </Typography>
                 )}
+                <Typography variant="caption" sx={{ mt: 0.5, display: 'block', color: 'text.secondary' }}>
+                    {tickers.length}/{LIMITS.tickers.max} tickers
+                </Typography>
             </Box>
 
             {/* Benchmark Section */}
@@ -367,7 +436,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                             onChange={(e) => setTrainingWindow(Number(e.target.value))}
                             fullWidth
                             sx={{ mb: 1 }}
-                            InputProps={{ inputProps: { min: 20 } }}
+                            InputProps={{ inputProps: { min: LIMITS.trainingWindow.min, max: LIMITS.trainingWindow.max } }}
+                            helperText={`${LIMITS.trainingWindow.min}-${LIMITS.trainingWindow.max} days`}
                         />
                     )}
                 </Box>
@@ -404,7 +474,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                             onChange={(e) => setRebalancingWindow(Number(e.target.value))}
                             fullWidth
                             sx={{ mt: 1 }}
-                            InputProps={{ inputProps: { min: 1 } }}
+                            InputProps={{ inputProps: { min: LIMITS.rebalancingWindow.min, max: LIMITS.rebalancingWindow.max } }}
+                            helperText={`${LIMITS.rebalancingWindow.min}-${LIMITS.rebalancingWindow.max} days`}
                         />
                     )}
                 </Box>
@@ -427,7 +498,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         value={transactionCostBps}
                         onChange={(e) => setTransactionCostBps(Number(e.target.value))}
                         fullWidth
-                        InputProps={{ inputProps: { min: 0, max: 200 } }}
+                        InputProps={{ inputProps: { min: LIMITS.transactionCostBps.min, max: LIMITS.transactionCostBps.max } }}
                     />
                 </Box>
                 <Box sx={{ display: 'flex', gap: { xs: 1, md: 0.5 }, mt: 0.5, flexWrap: 'wrap' }}>
@@ -453,16 +524,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         value={minWeight}
                         onChange={(e) => setMinWeight(Math.min(Number(e.target.value), maxWeight))}
                         fullWidth
-                        InputProps={{ inputProps: { min: 0, max: 100 } }}
+                        InputProps={{ inputProps: { min: LIMITS.minWeight.min, max: LIMITS.minWeight.max } }}
                     />
                     <TextField
                         size="small"
                         type="number"
                         label="Max %"
                         value={maxWeight}
-                        onChange={(e) => setMaxWeight(Math.max(Number(e.target.value), minWeight))}
+                        onChange={(e) => { setMaxWeightTouched(true); setMaxWeight(Math.max(Number(e.target.value), minWeight)); }}
                         fullWidth
-                        InputProps={{ inputProps: { min: 0, max: 100 } }}
+                        InputProps={{ inputProps: { min: LIMITS.maxWeight.min, max: LIMITS.maxWeight.max } }}
                     />
                 </Box>
                 <Box sx={{ display: 'flex', gap: { xs: 1, md: 0.5 }, mt: 0.5, flexWrap: 'wrap' }}>
@@ -476,7 +547,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                             <Chip
                                 label={`Diversified (Max ${recommendedMax}%)`}
                                 size="small"
-                                onClick={() => { setMinWeight(0); setMaxWeight(recommendedMax); }}
+                                onClick={() => { setMinWeight(0); setMaxWeight(recommendedMax); setMaxWeightTouched(false); }}
                                 clickable
                                 variant={maxWeight === recommendedMax ? "filled" : "outlined"}
                                 color="primary"
@@ -487,7 +558,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                     <Chip
                         label="Unconstrained"
                         size="small"
-                        onClick={() => { setMinWeight(0); setMaxWeight(100); }}
+                        onClick={() => { setMinWeight(0); setMaxWeight(100); setMaxWeightTouched(true); }}
                         clickable
                         variant={maxWeight === 100 ? "filled" : "outlined"}
                         sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
@@ -575,17 +646,18 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
 
             {/* Error */}
             {error && <Alert severity="error">{error}</Alert>}
+            {paramError && !error && <Alert severity="warning">{paramError}</Alert>}
 
             {/* Submit */}
             <Box sx={{ mt: 'auto', pt: 2 }}>
-                <Tooltip title={tickers.length < 2 ? 'Add at least 2 tickers' : ''}>
+                <Tooltip title={paramError ?? ''}>
                     <span>
                         <Button
                             variant="contained"
                             fullWidth
                             size="large"
                             onClick={handleSubmit}
-                            disabled={isLoading || tickers.length < 2}
+                            disabled={isLoading || !!paramError}
                             startIcon={<CompareIcon />}
                             sx={{
                                 py: 1.5,

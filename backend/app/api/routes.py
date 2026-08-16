@@ -252,6 +252,12 @@ def _run_strategy(
             edge_stats=edges,
         )
         return result, equity_series.pct_change().dropna()
+    except HTTPException:
+        # Actionable, user-facing rejections ("Not enough data. Need at least N
+        # points.") must survive: swallowing them here left the caller with
+        # three empty results and a generic "could not generate results for any
+        # method", hiding the one sentence that says how to fix the request.
+        raise
     except Exception as e:
         logger.error(f"Error in method {method}: {e}", exc_info=True)
         return None
@@ -335,6 +341,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         job_manager.update_job(job_id, 15, f"Running {', '.join([m.upper() for m in methods_to_run])} in parallel...")
 
         method_progress = {m: 0.0 for m in methods_to_run}
+        first_rejection: Optional[HTTPException] = None
 
         def make_progress_callback(method_name):
             def callback(p):
@@ -374,6 +381,13 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                         result, daily_returns = outcome
                         method_results.append(result)
                         method_returns[result.method_name] = daily_returns
+                except HTTPException as exc:
+                    # All three methods hit the same wall (too little history,
+                    # unusable tickers), so keep the first message and re-raise
+                    # it below rather than reporting "no results".
+                    logger.warning(f"Strategy {method} rejected: {exc.detail}")
+                    if first_rejection is None:
+                        first_rejection = exc
                 except Exception as exc:
                     logger.error(f"Strategy {method} generated an exception: {exc}", exc_info=True)
 
@@ -384,6 +398,8 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                 job_manager.update_job(job_id, int(current_progress), f"Completed {METHOD_NAMES.get(method, method)}...")
 
         if not method_results:
+            if first_rejection is not None:
+                raise first_rejection
             raise ValueError("Could not generate results for any method")
 
         benchmark_metrics = calculate_metrics(

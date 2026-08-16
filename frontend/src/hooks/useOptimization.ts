@@ -27,6 +27,43 @@ interface UseOptimizationReturn {
     runOptimization: (params: OptimizationParams) => Promise<void>;
 }
 
+/** One entry of FastAPI's 422 payload. */
+interface ValidationIssue {
+    msg?: string;
+    loc?: (string | number)[];
+}
+
+/**
+ * Turn any API failure into a string.
+ *
+ * FastAPI returns request-validation errors as `detail: [{loc, msg, ...}]` — a
+ * LIST of objects, not a string. Passing it straight to setError put an array
+ * of objects into JSX, and React refuses to render that ("Objects are not
+ * valid as a React child"): the whole app blanked out instead of showing the
+ * message. Any parameter outside the Pydantic bounds triggered it.
+ */
+function describeApiError(err: unknown): string {
+    const e = err as { response?: { data?: { detail?: unknown } }; message?: string };
+    const detail = e?.response?.data?.detail;
+
+    if (typeof detail === 'string' && detail.trim()) return detail;
+
+    if (Array.isArray(detail)) {
+        const parts = (detail as ValidationIssue[])
+            .map(issue => {
+                const field = Array.isArray(issue.loc)
+                    ? issue.loc.filter(p => p !== 'body').join('.')
+                    : '';
+                const msg = issue.msg ?? 'invalid value';
+                return field ? `${field} — ${msg}` : msg;
+            })
+            .filter(Boolean);
+        if (parts.length) return parts.join(' · ');
+    }
+
+    return e?.message || 'An unexpected error occurred. Please try again.';
+}
+
 /**
  * Hook to manage the optimization job lifecycle.
  * Handles starting jobs, polling for status, and managing loading states.
@@ -113,7 +150,7 @@ export function useOptimization(): UseOptimizationReturn {
                     if (status.status === 'queued' || status.status === 'processing') {
                         if (isMounted.current && isPolling) setTimeout(poll, pollInterval);
                     }
-                } catch (err) {
+                } catch {
                     // Retry on transient network errors
                     if (isMounted.current && isPolling) setTimeout(poll, pollInterval);
                 }
@@ -122,12 +159,7 @@ export function useOptimization(): UseOptimizationReturn {
             if (isMounted.current) poll();
 
         } catch (err: unknown) {
-            const error = err as { response?: { data?: { detail?: string } }; message?: string };
-            const message =
-                error?.response?.data?.detail ||
-                error?.message ||
-                'An unexpected error occurred. Please try again.';
-            setError(message);
+            setError(describeApiError(err));
             setIsLoading(false);
         }
     }, []);
