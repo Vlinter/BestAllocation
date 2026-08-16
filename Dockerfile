@@ -25,6 +25,11 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 RUN mkdir -p /app/.cache/joblib
 ENV JOBLIB_CACHE_DIR=/app/.cache/joblib
 
+# Drop privileges. Nothing here needs root: the only writer is the joblib cache.
+# Running as root turned any file-read bug into a full-filesystem read.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Expose port (Render uses PORT env var)
 ENV PORT=8000
 EXPOSE $PORT

@@ -1,6 +1,24 @@
+import re
+
 from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import List, Dict, Literal, Optional, Any
 from datetime import datetime as dt
+
+# Every ticker that reaches the data provider is interpolated into a Tiingo URL
+# path (`/tiingo/daily/{ticker}/prices`), and `requests` does not collapse '..'
+# segments — so an unvalidated ticker reaches a different endpoint of the API
+# carrying our own token. One pattern, applied to every ticker-shaped field.
+TICKER_PATTERN = re.compile(r'[A-Z0-9.\-]{1,12}')
+
+
+def normalize_ticker(raw: str, field: str = "ticker") -> str:
+    """Strip/upper-case a ticker and reject anything that is not one."""
+    cleaned = str(raw).strip().upper()
+    if not TICKER_PATTERN.fullmatch(cleaned):
+        raise ValueError(
+            f"Invalid {field}: '{raw}' (expected 1-12 chars: letters, digits, '.', '-')"
+        )
+    return cleaned
 
 # ============================================================================
 # Pydantic Models
@@ -194,16 +212,18 @@ class CompareRequest(BaseModel):
     def validate_tickers(cls, v):
         """Normalize (strip/upper) and reject malformed tickers before they
         reach the data provider (path segments, abuse, junk input)."""
-        import re
-        cleaned = []
-        for t in v:
-            t2 = str(t).strip().upper()
-            if not re.fullmatch(r'[A-Z0-9.\-]{1,12}', t2):
-                raise ValueError(f"Invalid ticker: '{t}' (expected 1-12 chars: letters, digits, '.', '-')")
-            cleaned.append(t2)
+        cleaned = [normalize_ticker(t) for t in v]
         if len(set(cleaned)) != len(cleaned):
             raise ValueError("Duplicate tickers in request")
         return cleaned
+
+    @field_validator('benchmark_ticker', mode='after')
+    @classmethod
+    def validate_benchmark_ticker(cls, v):
+        """Same gate as `tickers`: this one also ends up in a Tiingo URL path."""
+        if v is None or not str(v).strip():
+            return None
+        return normalize_ticker(v, field="benchmark_ticker")
 
     @field_validator('start_date', 'end_date', mode='before')
     @classmethod

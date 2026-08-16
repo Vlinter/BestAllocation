@@ -1,0 +1,25 @@
+# Secrets — `COPY backend/ ./backend/` would otherwise bake the Tiingo/FRED keys
+# into an image layer, where `docker history` recovers them even if a later
+# layer deletes the file.
+**/.env
+**/.env.*
+
+# Build/runtime artefacts that must be produced inside the image, not copied in
+frontend/node_modules/
+frontend/dist/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+
+# Joblib disk cache: megabytes of pickles tied to one machine's fetch history
+backend/__cache__/
+.cache/
+
+# Not needed at runtime
+.git/
+.github/
+.venv/
+venv/
+*.md
+Dockerfile
+.dockerignore
