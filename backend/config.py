@@ -36,6 +36,23 @@ RETURN_SHRINKAGE_INTENSITY = 0.5
 # 0.0 = no smoothing (full rebalance), 1.0 = no change (never rebalance)
 TURNOVER_SMOOTHING_FACTOR = 0.25
 
+# Exposure below which a period is treated as "in cash" and excluded from the
+# predictive-power statistics.
+#
+# The MVO go-to-cash returns all-zero weights, but the smoothing above then
+# blends 25% of the previous allocation back in, so reaching literally zero
+# takes five consecutive risk-off signals (~15 months at a quarterly cadence).
+# The old test — sum(weights) < 0.001 — therefore never fired once in 77
+# rebalances on the default universe, while eleven periods sat above 50% cash
+# and one reached 99.6%: a portfolio that is almost entirely cash has almost no
+# volatility, so its "realised Sharpe" explodes and lands on the +/-5 cap. Three
+# such capped values were feeding the rank-IC and the edge t-stat.
+#
+# 0.20 rather than 0.25: with a 25% weight cap, "one asset at the cap and
+# nothing else" is an exposure of exactly 0.25 and a perfectly real portfolio.
+# The threshold has to sit below that cluster, not on it.
+CASH_MODE_MAX_EXPOSURE = 0.20
+
 # Volatility Scaling (Adaptive Exposure)
 # Reduces exposure when realized vol > target (goes to cash)
 TARGET_VOLATILITY = 0.12  # 12% = moderate balanced portfolio

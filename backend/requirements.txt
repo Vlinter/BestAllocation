@@ -1,14 +1,22 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-PyPortfolioOpt>=1.5.6
-cvxpy>=1.4.0
-pandas==2.2.3
-numpy==1.26.4
-scipy==1.14.1
-python-multipart==0.0.12
-pydantic==2.9.2
-scikit-learn>=1.3.0
-joblib>=1.3.0
-requests>=2.31.0
+# Ranges rather than exact pins, with a major-version ceiling on each.
+#
+# The previous file pinned numpy==1.26.4, which publishes no wheel for Python
+# 3.13 — so `pip install -r requirements.txt` could not succeed on a 3.13
+# interpreter, and a developer on that version silently ended up running
+# numpy 2.x / pandas 2.3 locally while CI and the Docker image ran 1.26 / 2.2.
+# Local runs then validated a stack that never shipped. These ranges resolve to
+# the same versions everywhere and stay installable on 3.11 through 3.13.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+PyPortfolioOpt>=1.5.6,<2
+cvxpy>=1.4,<2
+pandas>=2.2,<3
+numpy>=1.26,<3
+scipy>=1.14,<2
+python-multipart>=0.0.12,<1
+pydantic>=2.8,<3
+scikit-learn>=1.3,<2
+joblib>=1.3,<2
+requests>=2.31,<3
 packaging>=23.2
-python-dotenv>=1.0.0
+python-dotenv>=1.0,<2

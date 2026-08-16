@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import from new structure
 from ..core.schemas import (
-    OptimizationResponse, PerformanceMetrics, 
+    PerformanceMetrics,
     CurrentAllocation, CompareRequest, CompareResponse, MethodResult, ModelParams
 )
 from ..services.jobs import job_manager
@@ -219,11 +219,23 @@ def _run_strategy(
         ) if usable else None
         edges = edge_statistics([e.get("realized_edge", 0.0) for e in usable]) if usable else None
 
+        # Fallbacks are already flagged per period in allocation_history; count
+        # them so the dashboard can say so instead of leaving the information
+        # buried in the shading of the allocation chart.
+        n_fallbacks = sum(1 for a in allocation_history if a.get("_fallback"))
+        last_was_fallback = bool(allocation_history and allocation_history[-1].get("_fallback"))
+
         current_alloc = CurrentAllocation(
             date=datetime.now().strftime("%Y-%m-%d"),
             weights=current_weights or {},
             risk_contributions=risk_contributions or {},
             method=method,
+            fallback_used=last_was_fallback,
+            fallback_reason=(
+                f"The optimizer failed on this rebalance and defaulted to cash "
+                f"({n_fallbacks} of {len(allocation_history)} rebalances over the backtest)."
+                if last_was_fallback else None
+            ),
             dendrogram_data=dendrogram_data_comp
         )
 
@@ -472,10 +484,12 @@ def run_comparison_job(job_id: str, request: CompareRequest):
             correlation_matrix=correlation_matrix,
             efficient_frontier_data=efficient_frontier_data,
             warnings=data_warnings,
-            significance=significance
+            significance=significance,
+            benchmark_stress_tests=calculate_stress_tests(benchmark_curve),
         )
-        
-        job_manager.update_job(job_id, 100, "Optimization Complete", status="completed", result=sanitize_nan(response.dict()))
+
+        job_manager.update_job(job_id, 100, "Optimization Complete", status="completed",
+                               result=sanitize_nan(response.model_dump()))
 
     except HTTPException as e:
         # Intentional, user-actionable messages (bad tickers, not enough data...)

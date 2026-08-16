@@ -55,37 +55,26 @@ class CurrentAllocation(BaseModel):
     weights: Dict[str, float]
     risk_contributions: Dict[str, float] = {}
     method: str
-    constraints_clipped: bool = False  # True if HRP weights were clipped to meet constraints
-    fallback_used: bool = False  # True if optimization failed and fell back to Equal Weight
-    fallback_reason: Optional[str] = None  # Reason for fallback if used
+    # True when the LAST rebalance came from a fallback (convex solver failure
+    # or risk-off), with a summary of how often it happened over the backtest.
+    # These were declared but never populated, so the dashboard alert reading
+    # them was unreachable — while MVO in fact falls back on ~8% of periods.
+    fallback_used: bool = False
+    fallback_reason: Optional[str] = None
     dendrogram_data: Optional[Dict[str, Any]] = None  # HRP hierarchical clustering structure
-
-
-class OptimizationResponse(BaseModel):
-    equity_curve: List[Dict[str, float]]
-    benchmark_curve: List[Dict[str, float]]
-    drawdown_curve: List[Dict[str, float]]
-
-    performance_metrics: PerformanceMetrics
-    benchmark_metrics: PerformanceMetrics
-    allocation_history: List[Dict]
-    rebalance_dates: List[str]
-    current_allocation: CurrentAllocation
-    tickers: List[str]
-    method: str
-    risk_free_rate: float
-    data_start_date: str
-    data_end_date: str
 
 
 class OverfittingMetric(BaseModel):
     date: str
     predicted_sharpe: float
     realized_sharpe: float
-    # True when the strategy sat in cash for the period. Both Sharpes are then
-    # degenerate (0, 0) placeholders and must be EXCLUDED from predictive-power
-    # statistics (Spearman / regression) by consumers.
+    # True when the strategy was mostly in cash for the period (exposure below
+    # CASH_MODE_MAX_EXPOSURE). Both Sharpes are then degenerate (0, 0)
+    # placeholders and must be EXCLUDED from predictive-power statistics
+    # (Spearman / regression) by consumers.
     is_cash: bool = False
+    # Sum of the target weights, so the exclusion above is auditable.
+    invested_weight: float = 1.0
     # Same-window Sharpe of the naive 1/N portfolio (in-sample) and of the
     # displayed benchmark (out-of-sample). The differences below are the
     # low-noise version of the diagnostic: subtracting the benchmark removes
@@ -272,3 +261,6 @@ class CompareResponse(BaseModel):
     warnings: List[str] = []
     # Bootstrap CIs on Sharpe gaps, PBO and Deflated Sharpe (cross-strategy)
     significance: Optional[SignificanceReport] = None
+    # Same crisis windows as the strategies, on the benchmark curve: "-35% in
+    # 2008" is unreadable without the reference line next to it.
+    benchmark_stress_tests: List[Dict[str, Any]] = []

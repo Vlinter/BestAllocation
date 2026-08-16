@@ -1,10 +1,7 @@
 export { default as Sidebar } from './Sidebar';
-export { default as MetricsTable } from './MetricsTable';
 
-export { default as CurrentAllocationCard } from './CurrentAllocationCard';
 export { default as ComparisonChart } from './ComparisonChart';
 export { default as ComparisonTable } from './ComparisonTable';
-export { default as AllocationPieCharts } from './AllocationPieCharts';
 export { default as AllocationHistoryChart } from './AllocationHistoryChart';
 export { default as DataInfoCard } from './DataInfoCard';
 export { default as DrawdownComparisonChart } from './DrawdownComparisonChart';
@@ -24,12 +21,12 @@ export { default as SkeletonLoader } from './SkeletonLoader';
 
 export { default as WelcomeScreen } from './WelcomeScreen';
 
-export { default as MonthlyReturnsHeatmap } from './MonthlyReturnsHeatmap';
 export { default as ReturnsDistributionChart } from './ReturnsDistributionChart';
 export { default as SignificanceCard } from './SignificanceCard';
 export { default as PerformanceHistogram } from './PerformanceHistogram';
 export { default as RebalancerCard } from './RebalancerCard';
+export { default as RollingSharpeChart } from './RollingSharpeChart';
+export { default as StressTestCard } from './StressTestCard';
+export { default as DendrogramChart } from './DendrogramChart';
 
 export type { OptimizationParams } from './Sidebar';
-
-

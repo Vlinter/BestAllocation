@@ -67,11 +67,11 @@ export interface CurrentAllocation {
   weights: Record<string, number>;
   risk_contributions: Record<string, number>;
   method: string;
-  constraints_clipped?: boolean;  // True if HRP weights were clipped to meet constraints
-  fallback_used?: boolean;  // True if optimization failed and fell back to Equal Weight
-  fallback_reason?: string;  // Reason for fallback if used
+  /** True when the LAST rebalance came from a fallback (solver failure -> cash). */
+  fallback_used?: boolean;
+  /** Human-readable summary, including how often it happened over the backtest. */
+  fallback_reason?: string;
   dendrogram_data?: DendrogramData;  // Specific to method (HRP produces one, the others do not)
-
 }
 
 // Model transparency parameters
@@ -83,9 +83,11 @@ export interface OverfittingMetric {
   date: string;
   predicted_sharpe: number;
   realized_sharpe: number;
-  // True when the strategy sat in cash for the period: the (0, 0) pair is a
-  // placeholder and must be EXCLUDED from Spearman/regression statistics.
+  // True when the strategy was mostly in cash for the period: the (0, 0) pair
+  // is a placeholder and must be EXCLUDED from Spearman/regression statistics.
   is_cash?: boolean;
+  /** Sum of the target weights, so the exclusion above is auditable. */
+  invested_weight?: number;
   // Benchmark on the SAME window, and the resulting edge. Subtracting the
   // benchmark removes the market regime that dominates raw Sharpe levels.
   predicted_sharpe_ew?: number;
@@ -216,6 +218,8 @@ export interface CompareResponse {
   efficient_frontier_data?: EfficientFrontierData;
   warnings?: string[];  // Data quality or optimization warnings
   significance?: SignificanceReport | null;
+  /** Same crisis windows as the strategies, on the benchmark curve. */
+  benchmark_stress_tests?: StressTestResult[];
 }
 
 const apiClient = axios.create({

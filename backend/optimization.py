@@ -9,7 +9,7 @@ from pypfopt.exceptions import OptimizationError
 from .config import (
     TRADING_DAYS_PER_YEAR,
     COVARIANCE_CONDITION_NUMBER_THRESHOLD, RETURN_SHRINKAGE_INTENSITY,
-    MONTE_CARLO_SIMULATIONS
+    MONTE_CARLO_SIMULATIONS, BOOTSTRAP_SEED
 )
 
 # Configure module logger
@@ -383,8 +383,14 @@ def calculate_efficient_frontier(returns: pd.DataFrame, min_weight: float = 0.0,
         simulations = []
         n_assets = len(mu)
         
-        # Vectorized simulation for speed
-        w = np.random.random((num_simulations, n_assets))
+        # Vectorized simulation for speed. Seeded, and on a local Generator
+        # rather than the global NumPy state: the cloud is cached, so an
+        # unseeded draw redrew a different picture on every cache miss, and the
+        # shared global state is touched from three optimizer threads at once.
+        # Same determinism rule as the bootstrap CIs — identical inputs,
+        # identical output.
+        rng = np.random.default_rng(BOOTSTRAP_SEED)
+        w = rng.random((num_simulations, n_assets))
         w = (w.T / w.sum(axis=1)).T  # Normalize weights to sum to 1
         
         # Calculate return and volatility — O(n_sim × n_assets²) not O(n_sim²)

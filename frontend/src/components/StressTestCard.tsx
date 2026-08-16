@@ -1,11 +1,16 @@
 import React, { useMemo } from 'react';
 import { Paper, Typography, Box, Chip } from '@mui/material';
 import { WarningAmber } from '@mui/icons-material';
-import type { MethodResult } from '../api/client';
+import type { MethodResult, StressTestResult } from '../api/client';
 
 interface StressTestCardProps {
     methods: MethodResult[];
+    benchmarkName?: string;
+    /** Same windows on the benchmark curve: "-35% in 2008" means nothing alone. */
+    benchmarkStressTests?: StressTestResult[];
 }
+
+const BENCHMARK_KEY = '__benchmark__';
 
 // Display decoration only — the numbers come from the backend, which computes
 // them on the FULL-resolution equity curve. Never recompute them here from
@@ -26,7 +31,9 @@ const METHOD_COLORS: Record<string, string> = {
     mvo: '#A78BFA',
 };
 
-const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
+const StressTestCard: React.FC<StressTestCardProps> = ({ methods, benchmarkName, benchmarkStressTests }) => {
+    const hasBenchmark = (benchmarkStressTests?.length ?? 0) > 0;
+
     const stressResults = useMemo(() => {
         if (!methods.length) return [];
 
@@ -44,6 +51,11 @@ const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
                     : { return: 0, maxDrawdown: 0, available: false };
             });
 
+            const benchEntry = benchmarkStressTests?.find(s => s.name === sc.name);
+            methodResults[BENCHMARK_KEY] = benchEntry
+                ? { return: benchEntry.return, maxDrawdown: benchEntry.max_drawdown, available: benchEntry.available }
+                : { return: 0, maxDrawdown: 0, available: false };
+
             return {
                 scenario: {
                     name: sc.name,
@@ -58,7 +70,7 @@ const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
             // Only show scenarios where at least one method has data
             return Object.values(r.methodResults).some(mr => mr.available);
         });
-    }, [methods]);
+    }, [methods, benchmarkStressTests]);
 
     if (!stressResults.length) return null;
 
@@ -102,6 +114,11 @@ const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
                                     {m.method.toUpperCase()}
                                 </th>
                             ))}
+                            {hasBenchmark && (
+                                <th style={{ textAlign: 'center', padding: '8px 12px', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', fontWeight: 700 }}>
+                                    {benchmarkName ?? 'Benchmark'}
+                                </th>
+                            )}
                         </tr>
                     </thead>
                     <tbody>
@@ -117,15 +134,16 @@ const StressTestCard: React.FC<StressTestCardProps> = ({ methods }) => {
                                         {scenario.startDate} → {scenario.endDate}
                                     </Typography>
                                 </td>
-                                {methods.map((m, idx) => {
-                                    const result = methodResults[m.method];
-                                    const isLast = idx === methods.length - 1;
+                                {[...methods.map(m => m.method), ...(hasBenchmark ? [BENCHMARK_KEY] : [])].map((key, idx, all) => {
+                                    const result = methodResults[key];
+                                    const isLast = idx === all.length - 1;
+                                    const isBenchmark = key === BENCHMARK_KEY;
                                     return (
-                                        <td key={m.method} style={{ textAlign: 'center', padding: '10px 8px', borderRadius: isLast ? '0 8px 8px 0' : undefined }}>
-                                            {result.available ? (
-                                                <Box>
+                                        <td key={key} style={{ textAlign: 'center', padding: '10px 8px', borderRadius: isLast ? '0 8px 8px 0' : undefined }}>
+                                            {result?.available ? (
+                                                <Box sx={{ opacity: isBenchmark ? 0.75 : 1 }}>
                                                     <Typography variant="body2" sx={{
-                                                        fontWeight: 700,
+                                                        fontWeight: isBenchmark ? 600 : 700,
                                                         fontFamily: 'monospace',
                                                         color: result.return >= 0 ? '#10B981' : '#EF4444',
                                                     }}>

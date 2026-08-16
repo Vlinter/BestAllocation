@@ -90,7 +90,7 @@ The API is asynchronous: `POST /api/compare/start` returns a `job_id`; the front
 ## 🚀 Getting started
 
 ### Prerequisites
-- Python 3.11+ · Node.js 18+ · a free [Tiingo API key](https://api.tiingo.com/) (required) · a [FRED API key](https://fred.stlouisfed.org/docs/api/api_key.html) (optional — falls back to 4.5%)
+- Python 3.11–3.13 · Node.js 18+ · a free [Tiingo API key](https://api.tiingo.com/) (required) · a [FRED API key](https://fred.stlouisfed.org/docs/api/api_key.html) (optional — falls back to 4.5%)
 
 ### Run locally
 
@@ -118,10 +118,11 @@ pip install -r backend/requirements-dev.txt
 pytest backend -q                  # offline — no API keys needed
 ```
 
-**36 tests**, all offline. Two of them carry most of the weight:
+**67 tests**, all offline. A few carry most of the weight:
 
 - a discriminating tail-risk test — on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50);
-- the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows).
+- the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows);
+- the static-file handler is tested against real traversal payloads (`../`, percent-encoded separators, absurd paths), with a guard asserting the decoy file is genuinely reachable — otherwise those tests would pass vacuously.
 
 CI runs the backend tests and the frontend type-check/build on every PR.
 
@@ -139,8 +140,10 @@ Multi-stage build: the React app is compiled and served directly by FastAPI (SPA
 | `TIINGO_API_KEY` | ✅ | Market data |
 | `FRED_API_KEY` | – | Historical risk-free rate (fallback: 4.5% constant) |
 | `ALLOWED_ORIGINS` | prod | CORS — set to your exact domain(s), default `*` |
+| `TRUST_PROXY` | prod | Set to `1` **only** behind a proxy that rewrites `X-Forwarded-For` (Render, nginx). Off, the rate limiter keys on the socket peer; on, a direct client could spoof the header and get a fresh bucket per request |
 | `PORT` | – | Server port (default 8000) |
 | `JOBLIB_CACHE_DIR` | – | Disk cache location |
+| `JOBLIB_CACHE_LIMIT` | – | Cache size cap, trimmed LRU at startup (default `500M`) |
 
 ## ⚠️ Limitations
 

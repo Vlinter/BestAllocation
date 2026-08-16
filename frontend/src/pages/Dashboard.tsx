@@ -118,13 +118,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                 <Tab icon={<Science fontSize="small" />} iconPosition="start" label="Analysis" />
             </Tabs>
 
-            {/* Operational Warnings (constraints clipped, fallback used) */}
-            {results.methods.some((m: MethodResult) => m.current_allocation.constraints_clipped || m.current_allocation.fallback_used) && (
+            {/* The allocation on display came from a fallback, not from the
+                optimizer. The flag exists precisely for this: MVO's convex
+                solver fails on a small share of periods and defaults to cash. */}
+            {results.methods.some((m: MethodResult) => m.current_allocation.fallback_used) && (
                 <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {results.methods.filter((m: MethodResult) => m.current_allocation.constraints_clipped).map((m: MethodResult) => (
-                        <Alert key={`clip-${m.method}`} severity="info" icon={<WarningIcon />}>
-                            <AlertTitle>{m.method_name}: Weight Constraints Applied</AlertTitle>
-                            HRP weights were clipped to meet your min / max constraints.
+                    {results.methods.filter((m: MethodResult) => m.current_allocation.fallback_used).map((m: MethodResult) => (
+                        <Alert key={`fallback-${m.method}`} severity="warning" icon={<WarningIcon />}>
+                            <AlertTitle>{m.method_name}: latest allocation is a fallback</AlertTitle>
+                            {m.current_allocation.fallback_reason
+                                ?? 'The optimizer failed on the most recent rebalance and defaulted to cash.'}
                         </Alert>
                     ))}
                 </Box>
@@ -221,7 +224,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                 <Suspense fallback={<SkeletonLoader height={300} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <SignificanceCard results={results} />
-                        <StressTestCard methods={results.methods} />
+                        <StressTestCard
+                            methods={results.methods}
+                            benchmarkName={results.benchmark_name}
+                            benchmarkStressTests={results.benchmark_stress_tests}
+                        />
                         <OverfittingTable methods={results.methods} benchmarkName={results.benchmark_name} />
                         <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({
                             name: m.method_name,
