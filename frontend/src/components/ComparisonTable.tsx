@@ -26,6 +26,13 @@ interface MetricConfig {
     format: (value: number) => string;
     higherIsBetter: boolean;
     tooltip: string;
+    /**
+     * Whether a "Best" badge makes sense for this row. Beta is a description of
+     * how a strategy moves with the benchmark, not a score: awarding the badge
+     * to the lowest value crowned a beta of -0.5 over a beta of 1.0. The global
+     * ranking already excludes it — the table now agrees.
+     */
+    rankable?: boolean;
 }
 
 const metricsConfig: MetricConfig[] = [
@@ -42,8 +49,8 @@ const metricsConfig: MetricConfig[] = [
         tooltip: "Jensen's Alpha: Excess return vs benchmark after adjusting for beta. Positive = outperformance, negative = underperformance."
     },
     {
-        label: 'Beta', key: 'beta', format: (v) => v.toFixed(2), higherIsBetter: false,
-        tooltip: 'Market sensitivity. β=1 moves with market, β<1 is defensive, β>1 is aggressive. Lower often preferred for stability.'
+        label: 'Beta', key: 'beta', format: (v) => v.toFixed(2), higherIsBetter: false, rankable: false,
+        tooltip: 'Market sensitivity. β=1 moves with market, β<1 is defensive, β>1 is aggressive. Neither direction is "better" on its own — read it next to alpha.'
     },
     {
         label: 'CAGR', key: 'cagr', format: (v) => `${(v * 100).toFixed(2)}%`, higherIsBetter: true,
@@ -101,7 +108,9 @@ const getModelParamsTooltip = (method: MethodResult): string => {
 };
 
 const ComparisonTable: React.FC<ComparisonTableProps> = ({ methods, benchmarkMetrics, benchmarkName = 'Benchmark' }) => {
-    const getBestMethod = (key: keyof PerformanceMetrics, higherIsBetter: boolean): string => {
+    const getBestMethod = (metric: MetricConfig): string => {
+        if (metric.rankable === false) return '';
+        const { key, higherIsBetter } = metric;
         let bestMethod = '';
         let bestValue = higherIsBetter ? -Infinity : Infinity;
 
@@ -167,7 +176,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({ methods, benchmarkMet
                     </TableHead>
                     <TableBody>
                         {metricsConfig.map((metric) => {
-                            const bestMethod = getBestMethod(metric.key, metric.higherIsBetter);
+                            const bestMethod = getBestMethod(metric);
 
                             return (
                                 <TableRow key={metric.key} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>

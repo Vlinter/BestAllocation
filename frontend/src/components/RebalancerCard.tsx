@@ -42,6 +42,23 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
     const [holdings, setHoldings] = useState<Record<string, number>>(() =>
         Object.fromEntries(tickers.map(t => [t, 0]))
     );
+
+    // Re-sync when the universe changes. The lazy initialiser above runs once,
+    // and this card is never remounted between runs (same position in the
+    // tree), so after a second comparison on a different universe `holdings`
+    // still carried the previous tickers' amounts: the inputs showed one thing
+    // and `currentTotal` summed another, which is how the card produced trade
+    // instructions against a portfolio total that did not exist.
+    //
+    // Adjusting state during render on a prop change is React's documented
+    // pattern for this — an effect would render one frame with the stale total.
+    const [syncedTickers, setSyncedTickers] = useState(tickers);
+    if (tickers !== syncedTickers) {
+        setSyncedTickers(tickers);
+        // Amounts for tickers that survive are kept; newcomers start at 0.
+        setHoldings(prev => Object.fromEntries(tickers.map(t => [t, prev[t] ?? 0])));
+    }
+
     const [targetMethod, setTargetMethod] = useState<string>('hrp');
 
     // Feature toggles
