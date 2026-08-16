@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from .optimization import optimize_with_fallback, OptimizationResult
 from .config import (
     TRADING_DAYS_PER_YEAR, TURNOVER_SMOOTHING_FACTOR,
-    TARGET_VOLATILITY, VOLATILITY_LOOKBACK
+    TARGET_VOLATILITY, VOLATILITY_LOOKBACK, CASH_MODE_MAX_EXPOSURE
 )
 # Import the new helper
 from .metrics import infer_trading_frequency
@@ -437,8 +437,13 @@ def walk_forward_backtest(
         # 5. OVERFITTING METRICS
         # Predicted Sharpe (Optimizer's Expectation) vs Realized (Next Period)
         
-        # Check if we are in Cash mode (sum of weights close to 0)
-        is_cash_mode = sum(target_weights.values()) < 0.001
+        # Check if we are in Cash mode. The test is on the ACTUAL exposure, not
+        # on a near-zero sum: turnover smoothing keeps blending the previous
+        # allocation back in, so the strategy glides towards cash over several
+        # rebalances and a strict `< 0.001` test never fired. See
+        # CASH_MODE_MAX_EXPOSURE in config.py for why the bar sits at 20%.
+        invested_weight = sum(target_weights.values())
+        is_cash_mode = invested_weight < CASH_MODE_MAX_EXPOSURE
         
         # Determine the annual RF rate for this period
         if isinstance(risk_free_rate, pd.Series):
@@ -449,11 +454,13 @@ def walk_forward_backtest(
             period_rf_annual = float(risk_free_rate)
         
         if is_cash_mode:
-            # In Cash mode, Predicted Sharpe is 0 (Risk free excess return = 0)
-            # Realized Sharpe is technically infinite/undefined due to 0 vol, but we map it to 0.
-            # The is_cash flag lets consumers EXCLUDE these degenerate (0, 0) pairs from
-            # predictive-power statistics (Spearman/regression) — a pile of identical
-            # points would otherwise artificially inflate the correlation.
+            # Mostly-cash period: the cash leg is deterministic, so the realised
+            # volatility collapses and the Sharpe blows up (it lands on the +/-5
+            # cap). Both numbers are written as 0 placeholders and the is_cash
+            # flag lets consumers EXCLUDE the pair from predictive-power
+            # statistics (Spearman/regression) — a pile of identical points
+            # would otherwise artificially inflate the correlation, and a capped
+            # +5 would corrupt it outright.
             predicted_sharpe = 0.0
             realized_sharpe = 0.0
         else:
@@ -475,7 +482,10 @@ def walk_forward_backtest(
             "predicted_sharpe": round(float(predicted_sharpe), 4),
             "realized_sharpe": round(float(realized_sharpe), 4),
             "predicted_sharpe_ew": round(float(predicted_sharpe_ew), 4),
-            "is_cash": bool(is_cash_mode)
+            "is_cash": bool(is_cash_mode),
+            # Exported so the exclusion above is auditable rather than a hidden
+            # threshold: the reader can see how invested the strategy actually was.
+            "invested_weight": round(float(invested_weight), 4),
         })
 
         # Advance

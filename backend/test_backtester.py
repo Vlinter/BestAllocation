@@ -77,6 +77,61 @@ def test_equal_weight_benchmark_pays_transaction_costs():
     assert b50[0]["value"] < b0[0]["value"] + 1e-12
 
 
+def test_cash_flag_fires_on_exposure_not_on_a_zero_sum():
+    """
+    The go-to-cash returns all-zero weights, but turnover smoothing blends 25%
+    of the previous allocation back in, so `sum(weights) < 0.001` needed five
+    consecutive risk-off signals and never fired in practice — leaving
+    mostly-cash periods, whose realised Sharpe is pinned at the +/-5 cap, in the
+    predictive-power sample. The flag now tracks the actual exposure.
+    """
+    from backend.backtester import smooth_weights
+    from backend.config import CASH_MODE_MAX_EXPOSURE, TURNOVER_SMOOTHING_FACTOR
+
+    # One go-to-cash decision after a fully invested period.
+    weights = {"AAA": 0.5, "BBB": 0.5}
+    exposures = []
+    for _ in range(5):
+        weights = smooth_weights({"AAA": 0.0, "BBB": 0.0}, weights)
+        exposures.append(sum(weights.values()))
+
+    # The glide is geometric in the smoothing factor, never a step to zero.
+    assert exposures[0] == pytest.approx(TURNOVER_SMOOTHING_FACTOR)
+    assert all(e > 0 for e in exposures)
+
+    # 25% invested after one signal is still a real portfolio and stays in the
+    # sample; from the second signal on (6.25%) the Sharpe is cash-driven.
+    flagged = [e < CASH_MODE_MAX_EXPOSURE for e in exposures]
+    assert flagged == [False, True, True, True, True]
+
+    # The old `< 0.001` test needed all five consecutive risk-off signals —
+    # roughly 15 months at a quarterly cadence, which is why it never fired.
+    assert [e < 0.001 for e in exposures] == [False, False, False, False, True]
+
+
+def test_cash_flag_spares_a_capped_but_real_portfolio():
+    """
+    With a 25% weight cap, "one asset at the cap and nothing else" is an
+    exposure of exactly 0.25 — a real portfolio, not a cash position. The
+    threshold must sit below that cluster.
+    """
+    from backend.config import CASH_MODE_MAX_EXPOSURE
+    assert CASH_MODE_MAX_EXPOSURE < 0.25
+
+
+def test_overfitting_entries_expose_their_exposure():
+    """The exclusion has to be auditable from the payload, not just trusted."""
+    prices, opens = _make_market()
+    (_ec, _ah, _rd, _cw, _tc, _to, overfit, *_rest) = _run("mvo", prices, opens)
+
+    assert overfit, "expected at least one rebalance"
+    for entry in overfit:
+        assert "invested_weight" in entry
+        assert 0.0 <= entry["invested_weight"] <= 1.0 + 1e-9
+        # The flag and the exposure must tell the same story.
+        assert entry["is_cash"] == (entry["invested_weight"] < 0.20)
+
+
 def test_stress_tests_full_resolution():
     """COVID window (inside data range) available; GFC 2008 (before) N/A."""
     prices, opens = _make_market()

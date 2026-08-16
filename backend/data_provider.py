@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from datetime import datetime, timedelta
 import os
 import logging
+import threading
 from dotenv import load_dotenv
 from joblib import Memory
 import time
@@ -28,8 +29,23 @@ TIINGO_BASE_URL = "https://api.tiingo.com"
 FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 
-# Rate limiting
+# Rate limiting: minimum spacing between two Tiingo calls, ACROSS threads.
+# Tickers are fetched from a 5-worker pool, so a plain per-call sleep spaced
+# each worker's own calls and left the actual burst rate five times higher than
+# the number below suggests.
 RATE_LIMIT_DELAY = 0.2  # 200ms between calls
+_throttle_lock = threading.Lock()
+_last_call_at = 0.0
+
+
+def _throttle() -> None:
+    """Block until at least RATE_LIMIT_DELAY has passed since the last call."""
+    global _last_call_at
+    with _throttle_lock:
+        wait = RATE_LIMIT_DELAY - (time.monotonic() - _last_call_at)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call_at = time.monotonic()
 
 # ============================================================================
 # Caching Configuration
@@ -39,10 +55,22 @@ RATE_LIMIT_DELAY = 0.2  # 200ms between calls
 # Docker uses /app/.cache/joblib (created in Dockerfile)
 # Local development uses __cache__ relative to this file
 CACHE_DIR = os.environ.get(
-    "JOBLIB_CACHE_DIR", 
+    "JOBLIB_CACHE_DIR",
     os.path.join(os.path.dirname(__file__), "__cache__")
 )
 memory = Memory(CACHE_DIR, verbose=0)
+
+# Bounded: `end_date` resolves to today whenever the user leaves it blank, so
+# every universe creates a fresh entry on every day of use — an unbounded store
+# grows monotonically for as long as the tool is used. joblib keeps the most
+# recently accessed entries and drops the rest. (The limit belongs on
+# reduce_size, not on the Memory constructor: the constructor argument was
+# deprecated in joblib 1.3 and removed in 1.5.)
+CACHE_SIZE_LIMIT = os.environ.get("JOBLIB_CACHE_LIMIT", "500M")
+try:
+    memory.reduce_size(bytes_limit=CACHE_SIZE_LIMIT)
+except Exception as exc:  # a corrupt or read-only cache must not stop startup
+    logger.warning(f"Could not trim the joblib cache at {CACHE_DIR}: {exc}")
 
 # ============================================================================
 # Crypto Detection
@@ -90,7 +118,9 @@ def tiingo_request(endpoint: str, params: dict = None) -> dict | list:
         params = {}
     
     url = f"{TIINGO_BASE_URL}{endpoint}"
-    
+
+    _throttle()
+
     try:
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
@@ -141,10 +171,7 @@ def fetch_crypto_ticker_history(ticker: str, start_date: str, end_date: str) -> 
         # Parse date and set as index
         df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
         df = df.set_index("date")
-        
-        # Rate limiting
-        time.sleep(RATE_LIMIT_DELAY)
-        
+
         # Crypto uses 'close' and 'open' (no adj* fields — no splits/dividends)
         if "close" not in df.columns:
             logger.info(f"No close price for crypto {ticker}")
@@ -201,10 +228,7 @@ def fetch_ticker_history(ticker: str, start_date: str, end_date: str) -> Tuple[p
         # Parse date and set as index
         df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
         df = df.set_index("date")
-        
-        # Rate limiting
-        time.sleep(RATE_LIMIT_DELAY)
-        
+
         # Extract adjusted close (required)
         if "adjClose" in df.columns:
             adj_close = df["adjClose"]

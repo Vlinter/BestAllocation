@@ -219,9 +219,23 @@ if max(μ) < risk_free_rate:
 ```
 
 **Comportement:**
-- Les poids retournent à 0 → le backtester alloue 100% au cash
+- L'optimiseur retourne des poids à 0
 - Le cash génère des intérêts au taux `rf`
 - Cette décision est loggée pour transparence
+
+> ⚠️ **Le passage au cash est progressif, pas immédiat.** Le lissage de turnover
+> (`TURNOVER_SMOOTHING_FACTOR = 0.25`) réinjecte 25 % de l'allocation précédente à chaque
+> rebalancement, donc un signal « tout en cash » ne donne pas 100 % de cash : il donne
+> **75 %**, puis 93,75 %, puis 98,4 %… Il faut plusieurs signaux consécutifs — soit près d'un
+> an au rythme trimestriel — pour être réellement hors marché. C'est délibéré (ça évite de
+> vider le portefeuille sur un seul mois de rendements attendus faibles), mais il faut le lire
+> comme une **glissade** vers le cash, pas comme un interrupteur.
+>
+> Conséquence pratique mesurée sur l'univers par défaut (77 rebalancements) : le MVO descend
+> sous 50 % investi onze fois et atteint 0,4 % investi une fois, sans jamais passer par un
+> « 100 % cash » instantané. Le drapeau `is_cash` du diagnostic se déclenche donc sur
+> l'**exposition réelle** (< `CASH_MODE_MAX_EXPOSURE` = 20 %) et non sur une somme de poids
+> nulle — voir `config.py`.
 
 **Pourquoi c'est important:** Évite de forcer des positions longues dans un marché baissier généralisé.
 
