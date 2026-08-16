@@ -7,6 +7,7 @@ import sys
 import os
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -69,8 +70,8 @@ def test_equal_weight_benchmark_pays_transaction_costs():
     """The EW benchmark must end strictly lower when costs are applied."""
     prices, _ = _make_market()
     tickers = list(prices.columns)
-    b0, _to0 = get_equal_weight_benchmark(prices, 252, tickers, 21, transaction_cost_bps=0.0)
-    b50, _to50 = get_equal_weight_benchmark(prices, 252, tickers, 21, transaction_cost_bps=50.0)
+    b0, _to0, _c0 = get_equal_weight_benchmark(prices, 252, tickers, 21, transaction_cost_bps=0.0)
+    b50, _to50, _c50 = get_equal_weight_benchmark(prices, 252, tickers, 21, transaction_cost_bps=50.0)
     assert b50[-1]["value"] < b0[-1]["value"]
     # Initial deployment cost: first value already reflects 50bps
     assert b50[0]["value"] < b0[0]["value"] + 1e-12
@@ -150,8 +151,12 @@ def test_monthly_returns_use_month_end_values_not_sampled_points():
 
     # Reproduce from the month-end values themselves
     s = pd.Series(values, index=pd.DatetimeIndex(idx))
-    expected = s.resample("ME").last().pct_change().dropna().tolist()
-    assert rets == [round(e, 6) for e in expected]
+    expected = s.resample("ME").last().pct_change().dropna()
+    assert [r["value"] for r in rets] == [round(e, 6) for e in expected]
+
+    # The period end travels with the value: the histogram labels its bars from
+    # it, and deriving the label client-side is what drifted the boundaries.
+    assert [pd.Timestamp(r["date"], unit="ms") for r in rets] == list(expected.index)
 
     # Dropping every other point must not change the month-end anchors that survive
     thinned = curve[::2]
@@ -160,3 +165,90 @@ def test_monthly_returns_use_month_end_values_not_sampled_points():
 
     assert calculate_monthly_returns([]) == []
     assert calculate_monthly_returns(curve[:1]) == []
+
+
+def test_yearly_returns_are_calendar_years_not_first_to_last_sample():
+    """
+    The histogram's yearly mode used to measure first-sampled-point of a year to
+    last-sampled-point, so it silently dropped the start of January and the end
+    of December. Anchoring on calendar year ends is the whole point.
+    """
+    from backend.metrics import calculate_yearly_returns
+
+    idx = pd.date_range("2020-01-01", "2022-12-31", freq="D")
+    # +10% in 2021, -10% in 2022, measured on the 31 Dec closes exactly.
+    values = []
+    for d in idx:
+        if d.year == 2020:
+            values.append(100.0)
+        elif d.year == 2021:
+            values.append(100.0 if d.month < 12 or d.day < 31 else 110.0)
+        else:
+            values.append(110.0 if d.month < 12 or d.day < 31 else 99.0)
+    curve = [{"date": float(pd.Timestamp(d).value // 10**6), "value": v}
+             for d, v in zip(idx, values)]
+
+    rets = calculate_yearly_returns(curve)
+    assert len(rets) == 2                      # 3 year ends -> 2 returns
+    assert rets[0]["value"] == pytest.approx(0.10)
+    assert rets[1]["value"] == pytest.approx(-0.10)
+    assert [pd.Timestamp(r["date"], unit="ms").year for r in rets] == [2021, 2022]
+
+
+def test_equal_weight_benchmark_reports_the_costs_it_charges():
+    """
+    The benchmark pays the same costs as the strategies — but the figure was
+    never returned, so the comparison table showed 0.00% for the line that was
+    in fact the most expensive on the board.
+    """
+    from backend.backtester import get_equal_weight_benchmark
+
+    dates = pd.date_range("2020-01-01", periods=400, freq="B")
+    rng = np.random.default_rng(11)
+    prices = pd.DataFrame(
+        {t: 100 * np.cumprod(1 + rng.normal(0.0004, 0.011, len(dates)))
+         for t in ("AAA", "BBB", "CCC")},
+        index=dates,
+    )
+
+    cols = list(prices.columns)
+
+    # A window longer than the sample means no rebalance: the only cost is the
+    # initial deployment, exactly 10 bps of the starting 1.0.
+    _, _, deploy_only = get_equal_weight_benchmark(prices, 100, cols, 10_000, 10.0)
+    assert deploy_only == pytest.approx(0.001)
+
+    free, _, free_costs = get_equal_weight_benchmark(prices, 100, cols, 21, 0.0)
+    paid, _, paid_costs = get_equal_weight_benchmark(prices, 100, cols, 21, 10.0)
+
+    assert free_costs == 0.0
+    assert paid_costs > deploy_only          # rebalances add to the deployment
+
+    # The reported figure is the sum of nominal costs; the terminal gap is those
+    # same costs compounded forward, so they agree in size, not to the cent.
+    terminal_gap = free[-1]["value"] - paid[-1]["value"]
+    assert terminal_gap > 0
+    assert 0.5 < terminal_gap / paid_costs < 2.0
+
+
+def test_equal_weight_benchmark_starts_where_the_strategies_start():
+    """
+    The benchmark used to open one close earlier than the strategies, earning a
+    day of market return they never had and carrying one extra point.
+    """
+    from backend.backtester import get_equal_weight_benchmark
+
+    dates = pd.date_range("2020-01-01", periods=300, freq="B")
+    rng = np.random.default_rng(12)
+    prices = pd.DataFrame(
+        {t: 100 * np.cumprod(1 + rng.normal(0.0004, 0.011, len(dates)))
+         for t in ("AAA", "BBB")},
+        index=dates,
+    )
+    offset = 100
+    curve, _, _ = get_equal_weight_benchmark(prices, offset, list(prices.columns), 21, 0.0)
+
+    # First valued close is the one AFTER the decision date, as for a strategy
+    # that decides at `offset` and holds from the next session onwards.
+    assert pd.Timestamp(curve[0]["date"], unit="ms") == dates[offset + 1]
+    assert len(curve) == len(dates) - offset - 1

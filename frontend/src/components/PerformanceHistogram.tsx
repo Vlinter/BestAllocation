@@ -33,6 +33,8 @@ const METHOD_COLORS: Record<string, { main: string; light: string }> = {
     mvo: { main: '#A78BFA', light: '#C4B5FD' },
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 const PerformanceHistogram: React.FC<PerformanceHistogramProps> = React.memo(({ methods }) => {
     const [selectedMethodIndex, setSelectedMethodIndex] = useState(0);
     const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly');
@@ -40,96 +42,27 @@ const PerformanceHistogram: React.FC<PerformanceHistogramProps> = React.memo(({ 
     const method = methods[selectedMethodIndex];
     const methodColor = METHOD_COLORS[method?.method] || METHOD_COLORS.hrp;
 
-    // Calculate returns data based on view mode
-    const chartData = useMemo(() => {
-        if (!method?.equity_curve || method.equity_curve.length < 30) {
-            return [];
-        }
+    // Both series are computed server-side on the FULL-resolution equity curve.
+    // This component used to rebuild them from `equity_curve`, which is
+    // downsampled to 500 points for display: each "month" then ran from one
+    // arbitrarily sampled day to another, and each "year" silently lost the
+    // start of January and the end of December. On the default universe that
+    // reported the worst month as -12.58% instead of -9.61% and understated the
+    // monthly standard deviation by 26%.
+    const chartData = useMemo((): HistogramBar[] => {
+        const source = viewMode === 'monthly' ? method?.monthly_returns : method?.yearly_returns;
+        if (!source?.length) return [];
 
-        const curve = method.equity_curve;
-
-        if (viewMode === 'monthly') {
-            // Group by year-month and calculate monthly returns
-            const monthlyData: { label: string; value: number; date: Date }[] = [];
-            let prevMonthValue: number | null = null;
-            let currentYear = '';
-            let currentMonth = -1;
-            let currentMonthEndValue = 0;
-
-            curve.forEach((point, index) => {
-                const date = new Date(point.date);
-                const year = date.getFullYear().toString();
-                const month = date.getMonth();
-
-                if (currentYear === year && currentMonth === month) {
-                    // Same month, update end value
-                    currentMonthEndValue = point.value;
-                } else {
-                    // New month - finalize previous month
-                    if (prevMonthValue !== null && currentYear !== '') {
-                        const returnVal = (currentMonthEndValue - prevMonthValue) / prevMonthValue;
-                        if (!isNaN(returnVal) && Math.abs(returnVal) < 1) {
-                            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                            monthlyData.push({
-                                label: `${monthNames[currentMonth]} ${currentYear.slice(-2)}`,
-                                value: returnVal * 100,
-                                date: new Date(parseInt(currentYear), currentMonth)
-                            });
-                        }
-                    }
-                    prevMonthValue = point.value;
-                    currentMonthEndValue = point.value;
-                    currentYear = year;
-                    currentMonth = month;
-                }
-
-                // Handle last point
-                if (index === curve.length - 1 && prevMonthValue !== null) {
-                    const returnVal = (currentMonthEndValue - prevMonthValue) / prevMonthValue;
-                    if (!isNaN(returnVal) && Math.abs(returnVal) < 1) {
-                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        monthlyData.push({
-                            label: `${monthNames[currentMonth]} ${currentYear.slice(-2)}`,
-                            value: returnVal * 100,
-                            date: new Date(parseInt(currentYear), currentMonth)
-                        });
-                    }
-                }
-            });
-
-            return monthlyData.sort((a, b) => a.date.getTime() - b.date.getTime());
-        } else {
-            // Yearly returns
-            const yearlyData: { label: string; value: number; year: number }[] = [];
-            const yearStartValues: Record<string, number> = {};
-            const yearEndValues: Record<string, number> = {};
-
-            curve.forEach((point) => {
-                const date = new Date(point.date);
-                const year = date.getFullYear().toString();
-
-                if (!yearStartValues[year]) {
-                    yearStartValues[year] = point.value;
-                }
-                yearEndValues[year] = point.value;
-            });
-
-            Object.keys(yearStartValues).sort().forEach(year => {
-                const startVal = yearStartValues[year];
-                const endVal = yearEndValues[year];
-                const returnVal = (endVal - startVal) / startVal;
-
-                if (!isNaN(returnVal) && Math.abs(returnVal) < 5) {
-                    yearlyData.push({
-                        label: year,
-                        value: returnVal * 100,
-                        year: parseInt(year)
-                    });
-                }
-            });
-
-            return yearlyData.sort((a, b) => a.year - b.year);
-        }
+        return source.map(point => {
+            const end = new Date(point.date);
+            return {
+                label: viewMode === 'monthly'
+                    ? `${MONTH_NAMES[end.getUTCMonth()]} ${String(end.getUTCFullYear()).slice(-2)}`
+                    : String(end.getUTCFullYear()),
+                value: point.value * 100,
+                year: end.getUTCFullYear(),
+            };
+        });
     }, [method, viewMode]);
 
     // Custom tooltip

@@ -516,12 +516,25 @@ def get_equal_weight_benchmark(
     tickers: List[str],
     rebalancing_window: int = 21,
     transaction_cost_bps: float = 0.0
-) -> Tuple[List[Dict], float]:
+) -> Tuple[List[Dict], float, float]:
     """
     Generate Equal Weight (1/N) benchmark with periodic rebalancing and DRIFT.
     "Honest" Equal Weight: pays the SAME transaction costs as the strategies
     (initial deployment + each rebalance), so the comparison is like-for-like.
-    Returns (benchmark_curve, annualized_turnover_pct)
+
+    Returns (benchmark_curve, annualized_turnover_pct, total_transaction_costs).
+    The cost figure is returned rather than merely charged: it used to be
+    charged inside the curve but not reported, so the comparison table showed
+    the benchmark at 0.00% while it was in fact the most expensive line on the
+    board (2.95% of initial capital on the default universe, against 2.22% for
+    HRP).
+
+    Timing: deployed at the close of `start_offset` — the same decision date the
+    strategies use — and first valued at the NEXT close, so both curves start on
+    the same date with the same number of points. The strategies execute at the
+    following open instead, so the benchmark still keeps that one overnight gap;
+    on a 1/N basket over 20 years it is immaterial, and matching it exactly
+    would mean threading open prices through this vectorised path for nothing.
     """
     benchmark_values = []
     transaction_cost_pct = transaction_cost_bps / 10000.0
@@ -530,22 +543,28 @@ def get_equal_weight_benchmark(
     prices_clean = prices.apply(pd.to_numeric, errors='coerce').ffill().dropna()
     dates = prices_clean.index
 
-    if start_offset >= len(dates):
-        return [], 0.0
+    # Need at least one close AFTER the decision date to value anything.
+    if start_offset + 1 >= len(dates):
+        return [], 0.0, 0.0
 
     trading_days = infer_trading_frequency(dates)
-    years = (len(dates) - start_offset) / trading_days
+    years = (len(dates) - start_offset - 1) / trading_days
 
-    # Vectorized setup
+    # Vectorized setup. The block starts one day AFTER start_offset: the first
+    # return must be close(start_offset) -> close(start_offset + 1). Starting at
+    # start_offset would fold in the previous day's move, which the strategies
+    # never earn, and hand the benchmark one extra point.
     returns = prices_clean.pct_change().fillna(0.0)
-    returns_block = returns.iloc[start_offset:]
-    dates_block = dates[start_offset:]
+    returns_block = returns.iloc[start_offset + 1:]
+    dates_block = dates[start_offset + 1:]
 
     n = len(tickers)
     # Initial deployment: buying 1.0 of assets costs 1.0 × cost_pct (same as strategies)
-    initial_value = 1.0 * (1.0 - transaction_cost_pct)
+    initial_cost = 1.0 * transaction_cost_pct
+    initial_value = 1.0 - initial_cost
     current_amounts = np.full(n, initial_value / n)
     total_turnover_pct = 0.0
+    total_costs = initial_cost
 
     timestamps = dates_block.astype(np.int64) // 10**6
     returns_values = returns_block[tickers].values # shape (T, N)
@@ -583,6 +602,7 @@ def get_equal_weight_benchmark(
             # Two-sided traded value to get back to 1/N, and its cost
             diff_sum = np.sum(np.abs(end_val / n - end_amounts))
             cost = diff_sum * transaction_cost_pct
+            total_costs += cost
             if end_val > 0:
                 total_turnover_pct += (diff_sum / end_val) / 2.0
 
@@ -591,7 +611,7 @@ def get_equal_weight_benchmark(
 
     annualized_turnover = total_turnover_pct / max(years, 0.01)
 
-    return benchmark_values, annualized_turnover
+    return benchmark_values, annualized_turnover, total_costs
 
 
 

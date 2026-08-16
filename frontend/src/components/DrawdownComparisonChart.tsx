@@ -41,11 +41,15 @@ const DrawdownComparisonChart: React.FC<DrawdownComparisonChartProps> = React.me
         return downsampleSeries(rawData, 800);
     }, [methods]);
 
-    // Memoize max drawdowns calculation
+    // Max drawdown comes from the metrics, computed server-side on the FULL
+    // curve. Taking the minimum of `drawdown_curve` instead — it is downsampled
+    // to 500 points — misses the trough, which almost always falls between two
+    // sampled days: it read -27.26% for HRP on the default universe while the
+    // comparison table, two cards above, said -28.59%.
     const maxDrawdowns = useMemo(() => methods.map(m => ({
         method: m.method,
         name: m.method_name,
-        maxDD: Math.min(...m.drawdown_curve.map(p => p.value)),
+        maxDD: -Math.abs(m.performance_metrics.max_drawdown) * 100,
     })), [methods]);
 
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');

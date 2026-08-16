@@ -68,7 +68,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
         // the default universe, excess kurtosis fell from 1.40 to 1.07 that way.
         // The fallback exists only for responses predating the field.
         const returns: number[] = method.monthly_returns?.length
-            ? method.monthly_returns
+            ? method.monthly_returns.map(p => p.value)
             : (() => {
                 const out: number[] = [];
                 const curve = method.equity_curve;

@@ -22,7 +22,7 @@ from backend.data_provider import fetch_price_data, get_risk_free_rate, fetch_ri
 from backend.metrics import (
     calculate_metrics, calculate_drawdown_curve, calculate_correlation_matrix,
     infer_trading_frequency, calculate_stress_tests, calculate_rolling_sharpe,
-    calculate_monthly_returns
+    calculate_monthly_returns, calculate_yearly_returns
 )
 from backend.backtester import walk_forward_backtest, get_custom_benchmark, get_equal_weight_benchmark
 from backend.optimization import calculate_efficient_frontier
@@ -53,12 +53,24 @@ def sanitize_nan(obj):
     return obj
 
 def downsample_curve(curve_data: list, max_points: int = 500) -> list:
-    """Downsample a time series curve to reduce JSON payload size."""
+    """
+    Downsample a time series curve to reduce JSON payload size.
+
+    The LAST point is always kept. `int(i * step)` for i < max_points never
+    reaches len-1, so the displayed curve used to stop up to `step` points
+    early: on a 20-year backtest the equity chart ended nine trading days
+    before the backtest did, showing +332.40% where the metrics table — built
+    on the full curve — said +342.27%. Two numbers for the same quantity, side
+    by side on the same tab.
+
+    May return max_points + 1 entries; the payload saving is unaffected.
+    """
     if not curve_data or len(curve_data) <= max_points:
         return curve_data
-    
+
     step = len(curve_data) / max_points
-    return [curve_data[int(i * step)] for i in range(max_points)]
+    indices = sorted({int(i * step) for i in range(max_points)} | {len(curve_data) - 1})
+    return [curve_data[i] for i in indices]
 
 
 # Model parameters helper
@@ -167,9 +179,11 @@ def _run_strategy(
             equity_curve, risk_free_rate=rf_metrics,
             annualization_factor=trading_days_per_year
         )
-        # The returns-distribution card bins these; deriving them client-side from
-        # the 500-point display curve distorted every tail statistic it shows.
+        # The returns-distribution card bins these and the performance histogram
+        # labels one bar per period; deriving either client-side from the
+        # 500-point display curve distorted every statistic they show.
         monthly_returns = calculate_monthly_returns(equity_curve)
+        yearly_returns = calculate_yearly_returns(equity_curve)
 
         # --- Per-period edge over the benchmark -----------------------------
         # The raw predicted/realized Sharpe levels share the market regime,
@@ -233,6 +247,7 @@ def _run_strategy(
             stress_tests=stress_tests,
             rolling_sharpe=rolling_sharpe_payload,
             monthly_returns=monthly_returns,
+            yearly_returns=yearly_returns,
             predictive_power=power,
             edge_stats=edges,
         )
@@ -280,16 +295,26 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         benchmark_curve = None
         benchmark_name = "Equal Weight"
         bench_turnover = 0.0
+        # A custom benchmark is a reference index, shown gross by convention, so
+        # it genuinely has no costs. The equal-weight one is a traded strategy
+        # and pays exactly what the strategies pay — reporting 0 for it made the
+        # most expensive line on the board look free.
+        bench_costs = 0.0
+        bench_rebalances = 0
         if request.benchmark_type == "custom" and request.benchmark_ticker:
             benchmark_curve, benchmark_name = get_custom_benchmark(
                 prices, request.training_window, request.benchmark_ticker
             )
         if not benchmark_curve:
-            benchmark_curve, bench_turnover = get_equal_weight_benchmark(
+            benchmark_curve, bench_turnover, bench_costs = get_equal_weight_benchmark(
                 prices, request.training_window, tickers,
                 request.rebalancing_window, request.transaction_cost_bps
             )
             benchmark_name = "Equal Weight"
+            if benchmark_curve and request.rebalancing_window > 0:
+                # Same schedule as the strategies: one deployment plus one
+                # rebalance per completed window.
+                bench_rebalances = 1 + (len(benchmark_curve) - 1) // request.rebalancing_window
 
         benchmark_series = pd.Series(
             [b["value"] for b in benchmark_curve],
@@ -363,7 +388,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
 
         benchmark_metrics = calculate_metrics(
             benchmark_series, rf_metrics,
-            0, 0, bench_turnover,
+            bench_costs, bench_rebalances, bench_turnover,
             annualization_factor=trading_days_per_year
         )
         

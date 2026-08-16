@@ -181,9 +181,13 @@ class MethodResult(BaseModel):
     # receives downsampled curves, which must never be used for these):
     stress_tests: List[Dict[str, Any]] = []       # per historical crisis window
     rolling_sharpe: List[Dict[str, float]] = []   # rolling annualized Sharpe (display-downsampled)
-    # Month-boundary returns of the FULL curve: the distribution card bins these
-    # rather than rebuilding them from the downsampled display curve.
-    monthly_returns: List[float] = []
+    # Calendar-period returns of the FULL curve, as {date, value}: the
+    # distribution card bins the monthly ones and the performance histogram
+    # labels one bar per period. Both used to rebuild these from the
+    # downsampled display curve, which drifted the period boundaries and
+    # collapsed the dispersion (-26% on the monthly standard deviation).
+    monthly_returns: List[Dict[str, float]] = []
+    yearly_returns: List[Dict[str, float]] = []
     # Statistics of the predicted-vs-realized diagnostic (see significance.py).
     predictive_power: Optional[PredictivePower] = None
     edge_stats: Optional[EdgeStatistics] = None

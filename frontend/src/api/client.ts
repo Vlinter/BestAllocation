@@ -178,8 +178,14 @@ export interface MethodResult {
   method_params?: ModelParams;
   stress_tests?: StressTestResult[];
   rolling_sharpe?: CurvePoint[];
-  /** Month-boundary returns computed server-side on the full-resolution curve. */
-  monthly_returns?: number[];
+  /**
+   * Calendar-period returns computed server-side on the FULL-resolution curve,
+   * `date` being the period end. Never rebuild these from `equity_curve`: it is
+   * downsampled to 500 points, which drifts the period boundaries onto whatever
+   * day happened to be sampled and collapsed the monthly dispersion by 26%.
+   */
+  monthly_returns?: CurvePoint[];
+  yearly_returns?: CurvePoint[];
   predictive_power?: PredictivePower | null;
   edge_stats?: EdgeStatistics | null;
 }

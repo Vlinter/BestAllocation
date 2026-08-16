@@ -271,19 +271,23 @@ def calculate_rolling_sharpe(equity_curve: List[Dict], risk_free_rate: float = 0
     return [{"date": float(d), "value": round(float(v), 3)} for d, v in sharpe.items()]
 
 
-def calculate_monthly_returns(equity_curve: List[Dict]) -> List[float]:
+def _period_returns(equity_curve: List[Dict], freq: str) -> List[Dict[str, float]]:
     """
-    Month-boundary returns of the FULL-resolution equity curve.
+    Period-boundary returns of the FULL-resolution equity curve, as
+    {date, value} pairs where `date` is the period end in epoch milliseconds.
 
     Must be called BEFORE downsampling. The display curve is capped at 500
     points — about one every ten trading days on a 20-year backtest — so
-    reconstructing "monthly" returns from it silently distorts the shape of the
-    distribution: measured on the default universe, the excess kurtosis of the
-    monthly returns drops from 1.40 to 1.07 (-24%) for no reason other than the
-    sampling. Same trap as the stress tests and the rolling Sharpe.
+    reconstructing calendar returns from it silently distorts them twice over:
+    the boundaries drift to whichever point happened to be sampled, and the
+    dispersion collapses. Measured on the default universe, the excess kurtosis
+    of the monthly returns dropped from 1.40 to 1.07 (-24%) and their standard
+    deviation from 3.14% to 2.32% (-26%), with the worst month reported as
+    -12.58% instead of -9.61%. Same trap as the stress tests and the rolling
+    Sharpe.
 
-    Returns a plain list (~230 floats for 20 years) so the client can draw the
-    histogram and derive its statistics from exact values.
+    The dates travel with the values because the histogram labels its bars;
+    deriving them client-side is exactly what produced the drift above.
     """
     if len(equity_curve) < 2:
         return []
@@ -292,10 +296,30 @@ def calculate_monthly_returns(equity_curve: List[Dict]) -> List[float]:
         [p["value"] for p in equity_curve],
         index=pd.to_datetime([p["date"] for p in equity_curve], unit="ms"),
     )
-    # Last observation of each calendar month, then simple returns between them.
-    monthly = series.resample("ME").last().dropna()
-    rets = monthly.pct_change().dropna()
-    return [round(float(r), 6) for r in rets if math.isfinite(r)]
+    # Last observation of each calendar period, then simple returns between them.
+    boundary = series.resample(freq).last().dropna()
+    rets = boundary.pct_change().dropna()
+    return [
+        {"date": float(d.value // 10**6), "value": round(float(r), 6)}
+        for d, r in rets.items()
+        if math.isfinite(r)
+    ]
+
+
+def calculate_monthly_returns(equity_curve: List[Dict]) -> List[Dict[str, float]]:
+    """Month-boundary returns (~230 points for 20 years). See _period_returns."""
+    return _period_returns(equity_curve, "ME")
+
+
+def calculate_yearly_returns(equity_curve: List[Dict]) -> List[Dict[str, float]]:
+    """
+    Calendar-year returns. See _period_returns.
+
+    Note the first entry is the first FULL year: a backtest starting in May
+    2007 has no 2007 return, because there is no December 2006 close to measure
+    it from. Reporting a partial year next to full ones would be worse.
+    """
+    return _period_returns(equity_curve, "YE")
 
 
 def calculate_drawdown_curve(equity_curve: List[Dict]) -> List[Dict[str, float]]:
