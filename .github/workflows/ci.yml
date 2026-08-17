@@ -43,6 +43,9 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+      - name: Component tests
+        run: npm test
+
       # Blocking: the backlog this used to tolerate (no-explicit-any, then the
       # react-hooks family) is cleared, so the next finding is a new one.
       - name: Lint

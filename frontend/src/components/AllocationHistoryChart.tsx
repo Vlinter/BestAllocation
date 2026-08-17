@@ -18,7 +18,7 @@ const COLORS = [
 
 // Module scope so React keeps one component type across renders; Recharts
 // clones the `content` element with its own props, so `showPercentage` survives.
-const CustomTooltip = ({ active, payload, label, showPercentage = true }:
+export const CustomTooltip = ({ active, payload, label, showPercentage = true }:
     ChartTooltipProps & { showPercentage?: boolean }) => {
     if (active && payload && payload.length) {
         return (

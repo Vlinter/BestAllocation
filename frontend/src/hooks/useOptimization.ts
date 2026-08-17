@@ -42,7 +42,7 @@ interface ValidationIssue {
  * valid as a React child"): the whole app blanked out instead of showing the
  * message. Any parameter outside the Pydantic bounds triggered it.
  */
-function describeApiError(err: unknown): string {
+export function describeApiError(err: unknown): string {
     const e = err as { response?: { data?: { detail?: unknown } }; message?: string };
     const detail = e?.response?.data?.detail;
 
