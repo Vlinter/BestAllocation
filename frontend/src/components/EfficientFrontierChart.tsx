@@ -47,21 +47,25 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
     const [showAssets, setShowAssets] = useState(true);
     const [showCML, setShowCML] = useState(true);
 
-    if (!data.efficient_frontier_data) {
-        return null;
-    }
+    // NB: the early return for a missing frontier lives BELOW every hook.
+    // Returning first made all seven useMemo calls conditional — React requires
+    // the same hook sequence on every render, so a response arriving without
+    // `efficient_frontier_data` while this component stays mounted would have
+    // crashed it with "rendered fewer hooks than expected". Not reachable today
+    // (the field is always populated), which is exactly why it would surprise.
+    const frontier = data.efficient_frontier_data;
 
-    const curveData = useMemo(() => data.efficient_frontier_data!.curve.map(d => ({
+    const curveData = useMemo(() => (frontier?.curve ?? []).map(d => ({
         x: d.volatility * 100,
         y: d.return * 100
-    })), [data.efficient_frontier_data]);
+    })), [frontier]);
 
-    const assetData = useMemo(() => data.efficient_frontier_data!.assets.map(d => ({
+    const assetData = useMemo(() => (frontier?.assets ?? []).map(d => ({
         x: d.volatility * 100,
         y: d.return * 100,
         name: d.ticker,
         z: 50
-    })), [data.efficient_frontier_data]);
+    })), [frontier]);
 
     const strategyData = useMemo(() => data.methods.map(m => ({
         x: m.performance_metrics.volatility * 100,
@@ -74,11 +78,11 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
         z: 200
     })), [data.methods]);
 
-    const simData = useMemo(() => (data.efficient_frontier_data!.simulations || []).map(d => ({
+    const simData = useMemo(() => (frontier?.simulations ?? []).map(d => ({
         x: d.volatility * 100,
         y: d.return * 100,
         z: 15
-    })), [data.efficient_frontier_data]);
+    })), [frontier]);
 
     const benchmarkData = useMemo(() => [{
         x: data.benchmark_metrics.volatility * 100,
@@ -135,6 +139,11 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
             simulationCount: simData.length
         };
     }, [curveData, strategyData, simData, data.risk_free_rate]);
+
+    // Every hook has run by now — safe to bail out.
+    if (!frontier) {
+        return null;
+    }
 
     // Custom Tooltip
     const CustomTooltip = ({ active, payload }: ChartTooltipProps<FrontierPoint>) => {
@@ -465,7 +474,7 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
                                         <stop offset="0%" stopColor="#6366F1" stopOpacity={0.8} />
                                         <stop offset="100%" stopColor="#A78BFA" stopOpacity={0.8} />
                                     </linearGradient>
-                                    {Object.entries(METHOD_STYLES).map(([key, _]) => (
+                                    {Object.keys(METHOD_STYLES).map((key) => (
                                         <filter key={`glow-${key}`} id={`glow-${key}`} x="-50%" y="-50%" width="200%" height="200%">
                                             <feGaussianBlur stdDeviation="4" result="coloredBlur" />
                                             <feMerge>
