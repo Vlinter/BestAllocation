@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { EmojiEvents as TrophyIcon, Info as InfoIcon } from '@mui/icons-material';
 import type { MethodResult, PerformanceMetrics } from '../api/client';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface ComparisonTableProps {
     methods: MethodResult[];
@@ -89,12 +90,6 @@ const metricsConfig: MetricConfig[] = [
         tooltip: 'Cumulative trading costs over the period. Reduces actual returns. Based on your cost per trade setting.'
     },
 ];
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
-};
 
 // Model parameters for transparency
 const getModelParamsTooltip = (method: MethodResult): string => {

@@ -16,19 +16,13 @@ import React, { useState, useMemo } from 'react';
 import type { CurvePoint, MethodResult } from '../api/client';
 import { TrendingUp, ShowChart } from '@mui/icons-material';
 import type { ChartTooltipProps } from '../types/charts';
+import { STRATEGY_GLOWS as METHOD_STYLES } from '../theme/strategies';
 
 interface ComparisonChartProps {
     methods: MethodResult[];
     benchmarkCurve: CurvePoint[];
     benchmarkName?: string;
 }
-
-const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
-    hrp: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.5)' },
-    nco: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.5)' },
-    cvar: { color: '#FFE66D', glow: 'rgba(255, 230, 109, 0.5)' },
-    mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.5)' },
-};
 
 const formatValue = (value: number) => `$${value.toFixed(2)}`;
 

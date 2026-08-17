@@ -26,6 +26,7 @@ from backend.metrics import (
 )
 from backend.backtester import walk_forward_backtest, get_custom_benchmark, get_equal_weight_benchmark
 from backend.optimization import calculate_efficient_frontier
+from backend.strategies import STRATEGY_IDS, display_name, get_strategy
 from backend.significance import (
     annualized_sharpe, compute_significance, edge_statistics, predictive_power
 )
@@ -33,11 +34,6 @@ from backend.significance import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-METHOD_NAMES = {
-    "hrp": "HRP (Hierarchical Risk Parity)",
-    "cvar": "CVaR (Conditional Value at Risk)",
-    "mvo": "MVO (Mean-Variance Max Sharpe)"
-}
 
 def sanitize_nan(obj):
     """Recursively replace NaN/Inf floats with None in a nested structure."""
@@ -73,15 +69,10 @@ def downsample_curve(curve_data: list, max_points: int = 500) -> list:
     return [curve_data[i] for i in indices]
 
 
-# Model parameters helper
+# Model parameters helper — the values live in the strategy registry.
 def get_model_params(method: str) -> ModelParams:
-    if method == "mvo":
-        return ModelParams()
-    elif method == "cvar":
-        return ModelParams()
-    elif method == "hrp":
-        return ModelParams(linkage_method="Ward Linkage")
-    return ModelParams()
+    strategy = get_strategy(method)
+    return ModelParams(**strategy.params) if strategy else ModelParams()
 
 
 @router.get("/health")
@@ -95,7 +86,7 @@ async def health():
 async def version():
     return {
         "version": "2.4.0-refactored",
-        "methods": ["hrp", "cvar", "mvo"],
+        "methods": list(STRATEGY_IDS),
         "features": ["walk_forward", "transaction_costs", "volatility_scaling"]
     }
 
@@ -248,7 +239,7 @@ def _run_strategy(
 
         result = MethodResult(
             method=method,
-            method_name=METHOD_NAMES.get(method, method),
+            method_name=display_name(method),
             equity_curve=equity_curve_payload,
             drawdown_curve=drawdown_curve_payload,
             performance_metrics=performance_metrics,
@@ -343,7 +334,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         job_manager.update_job(job_id, 15, "Preparing Backtest Engine...")
 
         cvar_alpha = 1.0 - request.cvar_confidence
-        methods_to_run = ["hrp", "cvar", "mvo"]
+        methods_to_run = list(STRATEGY_IDS)
         method_results = []
         method_returns = {}   # full-resolution daily returns, for the significance tests
 
@@ -407,7 +398,7 @@ def run_comparison_job(job_id: str, request: CompareRequest):
                 method_progress[method] = 1.0
                 total_p = sum(method_progress.values()) / total_methods
                 current_progress = 15 + (total_p * 70)
-                job_manager.update_job(job_id, int(current_progress), f"Completed {METHOD_NAMES.get(method, method)}...")
+                job_manager.update_job(job_id, int(current_progress), f"Completed {display_name(method)}...")
 
         if not method_results:
             if first_rejection is not None:

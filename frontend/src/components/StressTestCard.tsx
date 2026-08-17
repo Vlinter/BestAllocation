@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Paper, Typography, Box, Chip } from '@mui/material';
 import { WarningAmber } from '@mui/icons-material';
 import type { MethodResult, StressTestResult } from '../api/client';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface StressTestCardProps {
     methods: MethodResult[];
@@ -23,12 +24,6 @@ const SCENARIO_EMOJIS: Record<string, string> = {
     'China Deval 2015': '🇨🇳',
     'Q4 2018': '📊',
     '2022 Rate Hikes': '🏛️',
-};
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
 };
 
 const StressTestCard: React.FC<StressTestCardProps> = ({ methods, benchmarkName, benchmarkStressTests }) => {

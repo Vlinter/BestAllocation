@@ -2,18 +2,12 @@ import React, { useState } from 'react';
 import { Box, Paper, Typography, Tooltip } from '@mui/material';
 import { Info as InfoIcon, TrendingUp } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface RiskContributionChartProps {
     methods: MethodResult[];
     priceData?: { [ticker: string]: number[] };
 }
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    nco: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
-};
 
 // Enhanced color palette with gradients
 const ASSET_GRADIENT_COLORS = [

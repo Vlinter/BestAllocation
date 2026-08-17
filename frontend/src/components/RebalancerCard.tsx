@@ -20,18 +20,15 @@ import {
     AddCircleOutline as AddCashIcon,
 } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import { STRATEGY_COLORS, NEUTRAL_STYLE } from '../theme/strategies';
+
+// 'average' is a pseudo-strategy offered by this card only.
+const METHOD_COLORS: Record<string, string> = { ...STRATEGY_COLORS, average: NEUTRAL_STYLE.color };
 
 interface RebalancerCardProps {
     methods: MethodResult[];
     tickers: string[];
 }
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#60A5FA',
-    mvo: '#FBBF24',
-    average: '#A78BFA',
-};
 
 const fmt$ = (v: number) => v >= 0
     ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`

@@ -4,6 +4,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Today as TodayIcon } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
 import type { ChartTooltipProps } from '../types/charts';
+import { STRATEGY_STYLES, styleOf } from '../theme/strategies';
+
+const METHOD_DETAILS: Record<string, { label: string; color: string }> =
+    Object.fromEntries(Object.keys(STRATEGY_STYLES).map(id => [id,
+        { label: styleOf(id).short, color: styleOf(id).color }]));
 
 interface AllocationComparisonProps {
     methods: MethodResult[];
@@ -11,14 +16,6 @@ interface AllocationComparisonProps {
 }
 
 // Method details for consistent coloring/styling
-const METHOD_DETAILS: Record<string, { label: string; color: string }> = {
-    mvo: { label: 'MVO (Mean-Variance)', color: '#A78BFA' },
-    cvar: { label: 'CVaR (Min CVaR)', color: '#FFE66D' },
-    hrp: { label: 'HRP (Hierarchical Risk Parity)', color: '#00D4AA' },
-    nco: { label: 'NCO (Legacy)', color: '#00D4AA' },
-    cla: { label: 'CLA', color: '#F472B6' },
-};
-
 const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (active && payload && payload.length) {
         return (
