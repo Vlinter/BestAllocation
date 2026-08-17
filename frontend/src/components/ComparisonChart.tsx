@@ -53,15 +53,32 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
         return rawData;
     }, [methods, benchmarkCurve]);
 
+    /**
+     * Each curve starts at its own value on the first shared close, not at
+     * exactly 1.0: a strategy is valued after the deployment cost and one day
+     * of market, the benchmark likewise. Cumulative return is therefore
+     * `value / firstValue - 1`, which is what `performance_metrics.total_return`
+     * reports. Treating the base as 1.0 put this header 2.8 points above the
+     * metrics table for MVO (551.0% vs 548.21%).
+     */
+    const baseValues = useMemo(() => {
+        const base: Record<string, number> = { benchmark: benchmarkCurve[0]?.value || 1 };
+        methods.forEach(m => { base[m.method] = m.equity_curve[0]?.value || 1; });
+        return base;
+    }, [methods, benchmarkCurve]);
+
+    const cumulativeReturn = (value: number, key: string | number | undefined) =>
+        (value / (baseValues[String(key)] || 1) - 1) * 100;
+
     // Calculate final returns for display
     const finalReturns = useMemo(() => {
         const results: Record<string, number> = {};
         methods.forEach(m => {
             const lastValue = m.equity_curve[m.equity_curve.length - 1]?.value || 1;
-            results[m.method] = (lastValue - 1) * 100;
+            results[m.method] = (lastValue / (baseValues[m.method] || 1) - 1) * 100;
         });
         return results;
-    }, [methods]);
+    }, [methods, baseValues]);
 
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');
     const formatValue = (value: number) => `$${value.toFixed(2)}`;
@@ -112,17 +129,22 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
                             <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.9rem' }}>
                                 {formatValue(entry.value ?? 0)}
                             </Typography>
-                            <Chip
-                                label={`${(entry.value ?? 0) >= 1 ? '+' : ''}${(((entry.value ?? 0) - 1) * 100).toFixed(1)}%`}
-                                size="small"
-                                sx={{
-                                    height: 20,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    bgcolor: (entry.value ?? 0) >= 1 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                    color: (entry.value ?? 0) >= 1 ? '#10B981' : '#EF4444',
-                                }}
-                            />
+                            {(() => {
+                                const pct = cumulativeReturn(entry.value ?? 0, entry.dataKey);
+                                return (
+                                    <Chip
+                                        label={`${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                                        size="small"
+                                        sx={{
+                                            height: 20,
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            bgcolor: pct >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                            color: pct >= 0 ? '#10B981' : '#EF4444',
+                                        }}
+                                    />
+                                );
+                            })()}
                         </Box>
                     ))}
                 </Paper>
