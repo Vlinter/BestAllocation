@@ -51,7 +51,7 @@ const METHOD_COLORS: Record<string, { main: string; light: string; gradient: [st
 
 // Module scope so React keeps one component type across renders; Recharts
 // clones the `content` element with its own props, so `methodColor` survives.
-const CustomTooltip = ({ active, payload, methodColor = METHOD_COLORS.hrp }:
+export const CustomTooltip = ({ active, payload, methodColor = METHOD_COLORS.hrp }:
     ChartTooltipProps<DistributionPoint> & { methodColor?: typeof METHOD_COLORS[string] }) => {
     const data = payload?.[0]?.payload;
     if (active && data) {

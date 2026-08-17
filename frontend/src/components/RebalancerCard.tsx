@@ -59,7 +59,15 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
         setHoldings(prev => Object.fromEntries(tickers.map(t => [t, prev[t] ?? 0])));
     }
 
-    const [targetMethod, setTargetMethod] = useState<string>('hrp');
+    // Default to whichever strategy actually came back, not to a hardcoded id.
+    // A method that fails is simply absent from the response, and 'hrp' then
+    // resolved to no weights at all — which the card rendered as "CASH — 100%"
+    // plus an instruction to sell every position.
+    const [targetMethod, setTargetMethod] = useState<string>(() => methods[0]?.method ?? 'average');
+    const selectableIds = methods.map(m => m.method);
+    const effectiveMethod = targetMethod === 'average' || selectableIds.includes(targetMethod)
+        ? targetMethod
+        : (selectableIds[0] ?? 'average');
 
     // Feature toggles
     const [cashToAdd, setCashToAdd] = useState<number>(0);
@@ -76,7 +84,7 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
 
     // Compute target weights based on selected method
     const targetWeights = useMemo(() => {
-        if (targetMethod === 'average') {
+        if (effectiveMethod === 'average') {
             const avg: Record<string, number> = {};
             tickers.forEach(t => {
                 const sum = methods.reduce((s, m) => s + (m.current_allocation.weights[t] || 0), 0);
@@ -84,9 +92,9 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
             });
             return avg;
         }
-        const method = methods.find(m => m.method === targetMethod);
+        const method = methods.find(m => m.method === effectiveMethod);
         return method?.current_allocation.weights || {};
-    }, [targetMethod, methods, tickers]);
+    }, [effectiveMethod, methods, tickers]);
 
     // Compute trades
     const trades = useMemo(() => {
@@ -243,7 +251,7 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
                 Target Strategy
             </Typography>
             <ToggleButtonGroup
-                value={targetMethod}
+                value={effectiveMethod}
                 exclusive
                 onChange={(_, v) => v && setTargetMethod(v)}
                 size="small"
@@ -256,8 +264,8 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
                         value={m.method}
                         sx={{
                             fontSize: '0.75rem', py: 0.7, flex: '1 1 0',
-                            color: targetMethod === m.method ? METHOD_COLORS[m.method] : undefined,
-                            borderColor: targetMethod === m.method ? METHOD_COLORS[m.method] : undefined,
+                            color: effectiveMethod === m.method ? METHOD_COLORS[m.method] : undefined,
+                            borderColor: effectiveMethod === m.method ? METHOD_COLORS[m.method] : undefined,
                         }}
                     >
                         {m.method.toUpperCase()}
@@ -267,8 +275,8 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
                     value="average"
                     sx={{
                         fontSize: '0.75rem', py: 0.7, flex: '1 1 0',
-                        color: targetMethod === 'average' ? '#A78BFA' : undefined,
-                        borderColor: targetMethod === 'average' ? '#A78BFA' : undefined,
+                        color: effectiveMethod === 'average' ? '#A78BFA' : undefined,
+                        borderColor: effectiveMethod === 'average' ? '#A78BFA' : undefined,
                     }}
                 >
                     AVG
@@ -355,7 +363,7 @@ const RebalancerCard: React.FC<RebalancerCardProps> = React.memo(({ methods, tic
                         const isBuy = trade.tradeAmount > 1;
                         const isSell = trade.tradeAmount < -1;
                         const isHold = !isBuy && !isSell;
-                        const targetColor = METHOD_COLORS[targetMethod] || '#A78BFA';
+                        const targetColor = METHOD_COLORS[effectiveMethod] || '#A78BFA';
                         const maxWeight = Math.max(trade.currentWeight, trade.targetWeight, 0.01);
                         // Scale bars so the largest fills the full width
                         const scaleFactor = 100 / (maxWeight * 100 * 1.15);

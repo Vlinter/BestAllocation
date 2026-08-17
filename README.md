@@ -115,16 +115,21 @@ npm run dev                        # → http://localhost:5173
 
 ```bash
 pip install -r backend/requirements-dev.txt
-pytest backend -q                  # offline — no API keys needed
+pytest backend -q                  # backend — offline, no API keys needed
 ```
 
-**70 tests**, all offline. A few carry most of the weight:
+```bash
+cd frontend && npm test            # frontend components (vitest + testing-library)
+```
+
+**70 backend tests + 29 frontend component tests**, all offline. A few carry most of the weight:
 
 - a discriminating tail-risk test — on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50);
 - the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows);
-- the static-file handler is tested against real traversal payloads (`../`, percent-encoded separators, absurd paths), with a guard asserting the decoy file is genuinely reachable — otherwise those tests would pass vacuously.
+- the static-file handler is tested against real traversal payloads (`../`, percent-encoded separators, absurd paths), with a guard asserting the decoy file is genuinely reachable — otherwise those tests would pass vacuously;
+- on the frontend, the rebalancer is pinned against sizing trades from a stale universe (it once summed holdings for tickers it no longer displayed), the sidebar against sending a request the schema will reject, and `describeApiError` against ever returning something React cannot render.
 
-CI runs the backend tests and the frontend type-check/build on every PR.
+CI runs the backend tests, the frontend type-check/build, the component tests and the lint on every PR — all four blocking.
 
 ### Docker / production
 

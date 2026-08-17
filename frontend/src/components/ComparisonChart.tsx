@@ -38,7 +38,7 @@ const formatValue = (value: number) => `$${value.toFixed(2)}`;
  * clones the `content` element with its own props, so the ones set in JSX
  * survive.
  */
-const CustomTooltip = ({ active, payload, label, baseValues = {} }:
+export const CustomTooltip = ({ active, payload, label, baseValues = {} }:
     ChartTooltipProps & { baseValues?: Record<string, number> }) => {
     const cumulativeReturn = (value: number, key: string | number | undefined) =>
         (value / (baseValues[String(key)] || 1) - 1) * 100;

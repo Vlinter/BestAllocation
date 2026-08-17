@@ -72,7 +72,7 @@ const AssetDot = (props: ChartShapeProps<{ name?: string }>) => {
 
 // Module scope so React keeps one component type across renders; Recharts
 // clones the `content` element with its own props, so `benchmarkName` survives.
-const CustomTooltip = ({ active, payload, benchmarkName }:
+export const CustomTooltip = ({ active, payload, benchmarkName }:
     ChartTooltipProps<FrontierPoint> & { benchmarkName?: string }) => {
     const point = payload?.[0]?.payload;
     if (active && point) {
