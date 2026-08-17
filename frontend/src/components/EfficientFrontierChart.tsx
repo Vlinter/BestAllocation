@@ -16,6 +16,7 @@ import { Paper, Typography, Box, Chip, Button, Collapse, ToggleButtonGroup, Togg
 import { BubbleChart, Circle, ExpandMore, ExpandLess, TrendingUp, ShowChart, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { CompareResponse } from '../api/client';
 import type { ChartTooltipProps, ChartShapeProps } from '../types/charts';
+import { STRATEGY_GLOWS as METHOD_STYLES } from '../theme/strategies';
 
 interface EfficientFrontierChartProps {
     data: CompareResponse;
@@ -33,13 +34,6 @@ interface FrontierPoint {
     maxDrawdown?: number;
     isTangency?: boolean;
 }
-
-const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
-    hrp: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.6)' },
-    nco: { color: '#00D4AA', glow: 'rgba(0, 212, 170, 0.6)' },
-    cvar: { color: '#FFE66D', glow: 'rgba(255, 230, 109, 0.6)' },
-    mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.6)' },
-};
 
 const StrategyStar = (props: ChartShapeProps<{ method?: string }>) => {
     const { cx, cy, payload } = props;

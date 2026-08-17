@@ -14,6 +14,7 @@ import {
 import { BarChart as BarChartIcon, CalendarMonth, DateRange } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
 import type { ChartTooltipProps } from '../types/charts';
+import { STRATEGY_TONES as METHOD_COLORS } from '../theme/strategies';
 
 /** One bar of the performance histogram (a month or a year). */
 interface HistogramBar {
@@ -26,12 +27,6 @@ interface HistogramBar {
 interface PerformanceHistogramProps {
     methods: MethodResult[];
 }
-
-const METHOD_COLORS: Record<string, { main: string; light: string }> = {
-    hrp: { main: '#00D4AA', light: '#00FFD4' },
-    cvar: { main: '#FFE66D', light: '#FFF094' },
-    mvo: { main: '#A78BFA', light: '#C4B5FD' },
-};
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

@@ -13,16 +13,11 @@ import {
 import { Paper, Typography, Box, Chip } from '@mui/material';
 import { TrendingUp } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface RollingSharpeChartProps {
     methods: MethodResult[];
 }
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
-};
 
 const RollingSharpeChart: React.FC<RollingSharpeChartProps> = ({ methods }) => {
     const chartData = useMemo(() => {

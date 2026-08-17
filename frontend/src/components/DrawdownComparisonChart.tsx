@@ -14,16 +14,11 @@ import { format } from 'date-fns';
 import { downsampleSeries } from '../utils/chartUtils';
 import type { MethodResult } from '../api/client';
 import type { ChartTooltipProps } from '../types/charts';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface DrawdownComparisonChartProps {
     methods: MethodResult[];
 }
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
-};
 
 const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (active && payload && payload.length && label != null) {

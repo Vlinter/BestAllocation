@@ -15,6 +15,7 @@ import {
 import { ShowChart, TrendingUp, TrendingDown, Warning } from '@mui/icons-material';
 import type { MethodResult } from '../api/client';
 import type { ChartTooltipProps } from '../types/charts';
+import { STRATEGY_GRADIENTS as METHOD_COLORS } from '../theme/strategies';
 
 /** One point of the histogram + fitted gaussian overlay. */
 interface DistributionPoint {
@@ -30,24 +31,6 @@ interface DistributionPoint {
 interface ReturnsDistributionChartProps {
     methods: MethodResult[];
 }
-
-const METHOD_COLORS: Record<string, { main: string; light: string; gradient: [string, string] }> = {
-    hrp: {
-        main: '#00D4AA',
-        light: '#00FFD4',
-        gradient: ['#00D4AA', '#00FFF0']
-    },
-    cvar: {
-        main: '#FFE66D',
-        light: '#FFF094',
-        gradient: ['#FFE66D', '#FFF9CC']
-    },
-    mvo: {
-        main: '#A78BFA',
-        light: '#C4B5FD',
-        gradient: ['#A78BFA', '#DDD6FE']
-    },
-};
 
 // Module scope so React keeps one component type across renders; Recharts
 // clones the `content` element with its own props, so `methodColor` survives.

@@ -2,6 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography } from '@mui/material';
 import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
 import type { CompareResponse, MethodResult } from '../api/client';
+import { colorOf } from '../theme/strategies';
 import {
     DataInfoCard,
     ComparisonTable,
@@ -196,7 +197,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {results.efficient_frontier_data && <EfficientFrontierChart data={results} />}
                             <RiskContributionChart methods={results.methods} />
-                            {results.correlation_matrix && <CorrelationHeatmap data={results.correlation_matrix} dendrogramData={results.methods.find((m: MethodResult) => m.method === 'hrp')?.current_allocation.dendrogram_data} />}
+                            {results.correlation_matrix && <CorrelationHeatmap data={results.correlation_matrix} dendrogramData={results.methods.find((m: MethodResult) => m.current_allocation.dendrogram_data)?.current_allocation.dendrogram_data} />}
                         </Box>
                     </Suspense>
                 </ErrorBoundary>
@@ -234,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ results, globalRanking }) 
                         <OverfittingTable methods={results.methods} benchmarkName={results.benchmark_name} />
                         <OverfittingChart datasets={results.methods.map((m: MethodResult) => ({
                             name: m.method_name,
-                            color: m.method === 'hrp' ? '#00D4AA' : m.method === 'cvar' ? '#FFE66D' : '#A78BFA',
+                            color: colorOf(m.method),
                             data: m.overfitting_metrics || [],
                             rho: m.predictive_power?.rho,
                             ceiling: m.predictive_power?.rho_ceiling,

@@ -2,16 +2,11 @@ import React from 'react';
 import { Paper, Typography, Box, Tooltip, Chip, Divider } from '@mui/material';
 import { Balance as BalanceIcon, HelpOutline } from '@mui/icons-material';
 import type { CompareResponse, MethodResult } from '../api/client';
+import { STRATEGY_COLORS as METHOD_COLORS } from '../theme/strategies';
 
 interface Props {
     results: CompareResponse;
 }
-
-const METHOD_COLORS: Record<string, string> = {
-    hrp: '#00D4AA',
-    cvar: '#FFE66D',
-    mvo: '#A78BFA',
-};
 
 const GOOD = '#10B981';
 const WARN = '#F59E0B';
