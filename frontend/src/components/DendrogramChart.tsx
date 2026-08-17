@@ -40,6 +40,19 @@ const getCorrelationLabel = (dist: number, maxDist: number): string => {
     return 'Very Different';
 };
 
+// Fixed drawing surface, in SVG user units.
+const MARGIN = { top: 60, right: 40, bottom: 140, left: 80 };
+const CONTENT_WIDTH = 1000;
+const CONTENT_HEIGHT = 500;
+
+// Pure scales: they take their bounds instead of closing over them, so the
+// memoised link/grid/label computations depend on numbers rather than on
+// function identities that changed on every render.
+const scaleX = (x: number, minX: number, maxX: number) =>
+    ((x - minX) / (maxX - minX)) * CONTENT_WIDTH;
+const scaleY = (y: number, maxY: number) =>
+    CONTENT_HEIGHT - ((y / maxY) * CONTENT_HEIGHT);
+
 const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, weights = {} }) => {
     const { icoord, dcoord, ivl } = data;
     const [hoveredLink, setHoveredLink] = useState<number | null>(null);
@@ -52,11 +65,6 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
         return () => clearTimeout(timer);
     }, []);
 
-    // Margins and Dimensions
-    const margin = { top: 60, right: 40, bottom: 140, left: 80 };
-    const contentWidth = 1000;
-    const contentHeight = 500;
-
     // Bounds calculation
     const allX = icoord.flat();
     const allY = dcoord.flat();
@@ -64,20 +72,16 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
     const maxX = Math.max(...allX);
     const maxY = Math.max(...allY);
 
-    // Scales
-    const scaleX = (x: number) => ((x - minX) / (maxX - minX)) * contentWidth;
-    const scaleY = (y: number) => contentHeight - ((y / maxY) * contentHeight);
-
     // Process Links with distance-based coloring
     const links = useMemo(() => {
         return icoord.map((xs, i) => {
             const ys = dcoord[i];
 
-            const x1 = scaleX(xs[0]);
-            const y1 = scaleY(ys[0]);
-            const x2 = scaleX(xs[3]);
-            const y2 = scaleY(ys[3]);
-            const mergeY = scaleY(ys[1]);
+            const x1 = scaleX(xs[0], minX, maxX);
+            const y1 = scaleY(ys[0], maxY);
+            const x2 = scaleX(xs[3], minX, maxX);
+            const y2 = scaleY(ys[3], maxY);
+            const mergeY = scaleY(ys[1], maxY);
             const mergeX = (x1 + x2) / 2;
             const dist = ys[1];
 
@@ -136,7 +140,7 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
         const labels = ['Identical', 'Similar', 'Moderate', 'Different', 'Uncorrelated'];
         return [0, 0.25, 0.5, 0.75, 1].map((ratio, i) => ({
             value: maxY * ratio,
-            y: scaleY(maxY * ratio),
+            y: scaleY(maxY * ratio, maxY),
             label: labels[i],
             color: interpolateColor(ratio)
         }));
@@ -145,21 +149,21 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
     // Leaf Labels with enhanced styling - evenly spaced at bottom
     const leafLabels = useMemo(() => {
         const numLabels = ivl.length;
-        const spacing = contentWidth / (numLabels > 1 ? numLabels - 1 : 1);
+        const spacing = CONTENT_WIDTH / (numLabels > 1 ? numLabels - 1 : 1);
 
         return ivl.map((label, i) => {
             // Calculate X position: evenly spaced across the width
-            const x = numLabels === 1 ? contentWidth / 2 : i * spacing;
+            const x = numLabels === 1 ? CONTENT_WIDTH / 2 : i * spacing;
             const weight = weights[label] || 0;
             return {
                 label,
                 x,
-                y: contentHeight + 25,
+                y: CONTENT_HEIGHT + 25,
                 weight,
                 size: Math.max(8, Math.min(24, weight * 60))
             };
         });
-    }, [ivl, contentWidth, weights]);
+    }, [ivl, weights]);
 
     return (
         <Box sx={{ width: '100%', mt: 4, position: 'relative' }}>
@@ -234,7 +238,7 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
                 `}</style>
 
                 <svg
-                    viewBox={`-${margin.left} -${margin.top} ${contentWidth + margin.left + margin.right} ${contentHeight + margin.top + margin.bottom}`}
+                    viewBox={`-${MARGIN.left} -${MARGIN.top} ${CONTENT_WIDTH + MARGIN.left + MARGIN.right} ${CONTENT_HEIGHT + MARGIN.top + MARGIN.bottom}`}
                     style={{ width: '100%', height: 'auto', maxHeight: height, overflow: 'visible' }}
                 >
                     <defs>
@@ -253,7 +257,7 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
                         <g key={`grid-${i}`}>
                             <line
                                 x1={0} y1={grid.y}
-                                x2={contentWidth} y2={grid.y}
+                                x2={CONTENT_WIDTH} y2={grid.y}
                                 stroke="rgba(255,255,255,0.04)"
                                 strokeWidth="1"
                                 strokeDasharray={i === 0 ? "none" : "4,4"}
@@ -272,7 +276,7 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
                             </text>
                             {/* Interpretation label */}
                             <text
-                                x={contentWidth + 10}
+                                x={CONTENT_WIDTH + 10}
                                 y={grid.y}
                                 fill={grid.color}
                                 fontSize="10"
@@ -288,8 +292,8 @@ const DendrogramChart: React.FC<DendrogramChartProps> = ({ data, height = 500, w
                     {/* Y-Axis Label */}
                     <text
                         x={-65}
-                        y={contentHeight / 2}
-                        transform={`rotate(-90, -65, ${contentHeight / 2})`}
+                        y={CONTENT_HEIGHT / 2}
+                        transform={`rotate(-90, -65, ${CONTENT_HEIGHT / 2})`}
                         fill="rgba(148, 163, 184, 0.5)"
                         fontSize="12"
                         textAnchor="middle"

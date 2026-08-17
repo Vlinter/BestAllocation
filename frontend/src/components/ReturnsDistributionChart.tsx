@@ -49,6 +49,45 @@ const METHOD_COLORS: Record<string, { main: string; light: string; gradient: [st
     },
 };
 
+// Module scope so React keeps one component type across renders; Recharts
+// clones the `content` element with its own props, so `methodColor` survives.
+const CustomTooltip = ({ active, payload, methodColor = METHOD_COLORS.hrp }:
+    ChartTooltipProps<DistributionPoint> & { methodColor?: typeof METHOD_COLORS[string] }) => {
+    const data = payload?.[0]?.payload;
+    if (active && data) {
+
+        if (data.type === 'bin' && data.binStart !== undefined && data.binEnd !== undefined) {
+            return (
+                <Paper
+                    sx={{
+                        p: 2,
+                        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
+                        border: '1px solid',
+                        borderColor: methodColor.light,
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: `0 4px 20px ${methodColor.main}50`,
+                    }}
+                >
+                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block', mb: 1 }}>
+                        Return Range
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#fff', mb: 1, fontFamily: 'monospace' }}>
+                        {(data.binStart * 100).toFixed(2)}% → {(data.binEnd * 100).toFixed(2)}%
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: methodColor.main }} />
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: methodColor.main }}>
+                            {data.count} month{data.count !== 1 ? 's' : ''}
+                        </Typography>
+                    </Box>
+                </Paper>
+            );
+        }
+
+    }
+    return null;
+};
+
 const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.memo(({ methods }) => {
     const [selectedMethodIndex, setSelectedMethodIndex] = useState(0);
     const method = methods[selectedMethodIndex];
@@ -185,42 +224,6 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
             }
         };
     }, [method]);
-
-    const CustomTooltip = ({ active, payload }: ChartTooltipProps<DistributionPoint>) => {
-        const data = payload?.[0]?.payload;
-        if (active && data) {
-
-            if (data.type === 'bin' && data.binStart !== undefined && data.binEnd !== undefined) {
-                return (
-                    <Paper
-                        sx={{
-                            p: 2,
-                            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
-                            border: '1px solid',
-                            borderColor: methodColor.light,
-                            backdropFilter: 'blur(10px)',
-                            boxShadow: `0 4px 20px ${methodColor.main}50`,
-                        }}
-                    >
-                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block', mb: 1 }}>
-                            Return Range
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#fff', mb: 1, fontFamily: 'monospace' }}>
-                            {(data.binStart * 100).toFixed(2)}% → {(data.binEnd * 100).toFixed(2)}%
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: methodColor.main }} />
-                            <Typography variant="body2" sx={{ fontWeight: 700, color: methodColor.main }}>
-                                {data.count} month{data.count !== 1 ? 's' : ''}
-                            </Typography>
-                        </Box>
-                    </Paper>
-                );
-            }
-
-        }
-        return null;
-    };
 
     // Helper to get interpretation of skewness/kurtosis
     const getSkewnessLabel = (skew: number) => {
@@ -422,7 +425,7 @@ const ReturnsDistributionChart: React.FC<ReturnsDistributionChartProps> = React.
                             />
                         )}
 
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
+                        <Tooltip content={<CustomTooltip methodColor={methodColor} />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
 
                         {/* Smooth Gaussian curve - RENDER FIRST (background) */}
                         <Area

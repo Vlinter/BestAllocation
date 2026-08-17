@@ -30,6 +30,88 @@ const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
     mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.5)' },
 };
 
+const formatValue = (value: number) => `$${value.toFixed(2)}`;
+
+/**
+ * `baseValues` is passed in rather than closed over: this component lives at
+ * module scope so React keeps one component type across renders. Recharts
+ * clones the `content` element with its own props, so the ones set in JSX
+ * survive.
+ */
+const CustomTooltip = ({ active, payload, label, baseValues = {} }:
+    ChartTooltipProps & { baseValues?: Record<string, number> }) => {
+    const cumulativeReturn = (value: number, key: string | number | undefined) =>
+        (value / (baseValues[String(key)] || 1) - 1) * 100;
+
+    if (active && payload && payload.length && label != null) {
+        const sorted = [...payload].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+        return (
+            <Paper
+                sx={{
+                    p: 2,
+                    bgcolor: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    minWidth: 220,
+                }}
+            >
+                <Typography variant="caption" sx={{ color: '#888', display: 'block', mb: 1.5, fontSize: '0.75rem' }}>
+                    {format(new Date(label), 'MMMM dd, yyyy')}
+                </Typography>
+                {sorted.map((entry, index) => (
+                    <Box
+                        key={index}
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.5,
+                            mb: 0.75,
+                            py: 0.5,
+                            px: 1,
+                            borderRadius: 1,
+                            bgcolor: index === 0 ? 'rgba(255,255,255,0.05)' : 'transparent',
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: '50%',
+                                bgcolor: entry.color,
+                                boxShadow: `0 0 8px ${entry.color}`,
+                            }}
+                        />
+                        <Typography variant="body2" sx={{ flex: 1, fontWeight: 500, fontSize: '0.85rem' }}>
+                            {entry.name}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                            {formatValue(entry.value ?? 0)}
+                        </Typography>
+                        {(() => {
+                            const pct = cumulativeReturn(entry.value ?? 0, entry.dataKey);
+                            return (
+                                <Chip
+                                    label={`${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+                                    size="small"
+                                    sx={{
+                                        height: 20,
+                                        fontSize: '0.7rem',
+                                        fontWeight: 700,
+                                        bgcolor: pct >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                        color: pct >= 0 ? '#10B981' : '#EF4444',
+                                    }}
+                                />
+                            );
+                        })()}
+                    </Box>
+                ))}
+            </Paper>
+        );
+    }
+    return null;
+};
+
 const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, benchmarkCurve, benchmarkName = 'Equal Weight' }) => {
     const [scale, setScale] = useState<'linear' | 'log'>('log');
     const [highlightedMethod, setHighlightedMethod] = useState<string | null>(null);
@@ -67,9 +149,6 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
         return base;
     }, [methods, benchmarkCurve]);
 
-    const cumulativeReturn = (value: number, key: string | number | undefined) =>
-        (value / (baseValues[String(key)] || 1) - 1) * 100;
-
     // Calculate final returns for display
     const finalReturns = useMemo(() => {
         const results: Record<string, number> = {};
@@ -81,77 +160,6 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
     }, [methods, baseValues]);
 
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');
-    const formatValue = (value: number) => `$${value.toFixed(2)}`;
-
-    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-        if (active && payload && payload.length && label != null) {
-            const sorted = [...payload].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-            return (
-                <Paper
-                    sx={{
-                        p: 2,
-                        bgcolor: 'rgba(15, 23, 42, 0.95)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        backdropFilter: 'blur(20px)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        minWidth: 220,
-                    }}
-                >
-                    <Typography variant="caption" sx={{ color: '#888', display: 'block', mb: 1.5, fontSize: '0.75rem' }}>
-                        {format(new Date(label), 'MMMM dd, yyyy')}
-                    </Typography>
-                    {sorted.map((entry, index) => (
-                        <Box
-                            key={index}
-                            sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1.5,
-                                mb: 0.75,
-                                py: 0.5,
-                                px: 1,
-                                borderRadius: 1,
-                                bgcolor: index === 0 ? 'rgba(255,255,255,0.05)' : 'transparent',
-                            }}
-                        >
-                            <Box
-                                sx={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: '50%',
-                                    bgcolor: entry.color,
-                                    boxShadow: `0 0 8px ${entry.color}`,
-                                }}
-                            />
-                            <Typography variant="body2" sx={{ flex: 1, fontWeight: 500, fontSize: '0.85rem' }}>
-                                {entry.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.9rem' }}>
-                                {formatValue(entry.value ?? 0)}
-                            </Typography>
-                            {(() => {
-                                const pct = cumulativeReturn(entry.value ?? 0, entry.dataKey);
-                                return (
-                                    <Chip
-                                        label={`${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
-                                        size="small"
-                                        sx={{
-                                            height: 20,
-                                            fontSize: '0.7rem',
-                                            fontWeight: 700,
-                                            bgcolor: pct >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                            color: pct >= 0 ? '#10B981' : '#EF4444',
-                                        }}
-                                    />
-                                );
-                            })()}
-                        </Box>
-                    ))}
-                </Paper>
-            );
-        }
-        return null;
-    };
 
     return (
         <Paper
@@ -281,7 +289,7 @@ const ComparisonChart: React.FC<ComparisonChartProps> = React.memo(({ methods, b
                         axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                         tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                     />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={<CustomTooltip baseValues={baseValues} />} />
                     <Legend
                         wrapperStyle={{ paddingTop: 20 }}
                         formatter={(value) => <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>{value}</span>}

@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense, useEffect } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography } from '@mui/material';
 import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
 import type { CompareResponse, MethodResult } from '../api/client';
@@ -53,13 +53,15 @@ interface TabPanelProps {
 function CustomTabPanel(props: TabPanelProps) {
     const { children, value, index, ...other } = props;
     const isActive = value === index;
-    const [hasBeenActive, setHasBeenActive] = useState(false);
 
-    useEffect(() => {
-        if (isActive && !hasBeenActive) {
-            setHasBeenActive(true);
-        }
-    }, [isActive, hasBeenActive]);
+    // A tab is mounted lazily and then kept mounted, so its charts do not
+    // re-render from scratch on every visit. Adjusting during render rather
+    // than in an effect: the effect version painted one frame with the panel
+    // still absent, and cost a second render to correct itself.
+    const [hasBeenActive, setHasBeenActive] = useState(isActive);
+    if (isActive && !hasBeenActive) {
+        setHasBeenActive(true);
+    }
 
     if (!hasBeenActive && !isActive) return null;
 

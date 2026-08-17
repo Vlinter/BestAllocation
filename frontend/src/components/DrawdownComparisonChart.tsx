@@ -25,6 +25,37 @@ const METHOD_COLORS: Record<string, string> = {
     mvo: '#A78BFA',
 };
 
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+    if (active && payload && payload.length && label != null) {
+        return (
+            <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                    {format(new Date(label), 'MMM dd, yyyy')}
+                </Typography>
+                {payload.map((entry, index) => (
+                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: entry.color }} />
+                        <Typography variant="body2" sx={{ flex: 1, fontSize: '0.8rem' }}>
+                            {entry.name}:
+                        </Typography>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                fontWeight: 600,
+                                fontFamily: 'monospace',
+                                color: (entry.value ?? 0) < -20 ? 'error.main' : (entry.value ?? 0) < -10 ? 'warning.main' : 'text.primary',
+                            }}
+                        >
+                            {(entry.value ?? 0).toFixed(2)}%
+                        </Typography>
+                    </Box>
+                ))}
+            </Paper>
+        );
+    }
+    return null;
+};
+
 const DrawdownComparisonChart: React.FC<DrawdownComparisonChartProps> = React.memo(({ methods }) => {
     const [activeMethod, setActiveMethod] = useState<string | null>(null);
 
@@ -53,37 +84,6 @@ const DrawdownComparisonChart: React.FC<DrawdownComparisonChartProps> = React.me
     })), [methods]);
 
     const formatDate = (timestamp: number) => format(new Date(timestamp), 'MMM yyyy');
-
-    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-        if (active && payload && payload.length && label != null) {
-            return (
-                <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-                        {format(new Date(label), 'MMM dd, yyyy')}
-                    </Typography>
-                    {payload.map((entry, index) => (
-                        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: entry.color }} />
-                            <Typography variant="body2" sx={{ flex: 1, fontSize: '0.8rem' }}>
-                                {entry.name}:
-                            </Typography>
-                            <Typography
-                                variant="body2"
-                                sx={{
-                                    fontWeight: 600,
-                                    fontFamily: 'monospace',
-                                    color: (entry.value ?? 0) < -20 ? 'error.main' : (entry.value ?? 0) < -10 ? 'warning.main' : 'text.primary',
-                                }}
-                            >
-                                {(entry.value ?? 0).toFixed(2)}%
-                            </Typography>
-                        </Box>
-                    ))}
-                </Paper>
-            );
-        }
-        return null;
-    };
 
     return (
         <Paper sx={{ p: 3 }}>

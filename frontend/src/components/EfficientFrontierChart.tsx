@@ -41,6 +41,169 @@ const METHOD_STYLES: Record<string, { color: string; glow: string }> = {
     mvo: { color: '#A78BFA', glow: 'rgba(167, 139, 250, 0.6)' },
 };
 
+const StrategyStar = (props: ChartShapeProps<{ method?: string }>) => {
+    const { cx, cy, payload } = props;
+    const style = METHOD_STYLES[payload?.method ?? ''] || METHOD_STYLES.hrp;
+
+    return (
+        <g>
+            {/* Outer glow */}
+            <circle cx={cx} cy={cy} r={24} fill={style.color} opacity={0.15} />
+            <circle cx={cx} cy={cy} r={16} fill={style.color} opacity={0.3} />
+            {/* Main point */}
+            <circle cx={cx} cy={cy} r={10} fill={style.color} stroke="#fff" strokeWidth={2} />
+            {/* Inner dot */}
+            <circle cx={cx} cy={cy} r={3} fill="#fff" />
+        </g>
+    );
+};
+
+const AssetDot = (props: ChartShapeProps<{ name?: string }>) => {
+    const { cx, cy, payload } = props;
+    return (
+        <g>
+            <circle cx={cx} cy={cy} r={6} fill="#64748B" stroke="#94A3B8" strokeWidth={1.5} opacity={0.9} />
+            <text x={cx} y={(cy ?? 0) - 12} textAnchor="middle" fill="#94A3B8" fontSize={9} fontWeight={600}>
+                {payload?.name}
+            </text>
+        </g>
+    );
+};
+
+// Module scope so React keeps one component type across renders; Recharts
+// clones the `content` element with its own props, so `benchmarkName` survives.
+const CustomTooltip = ({ active, payload, benchmarkName }:
+    ChartTooltipProps<FrontierPoint> & { benchmarkName?: string }) => {
+    const point = payload?.[0]?.payload;
+    if (active && point) {
+        const isStrategy = point.sharpe !== undefined && point.method !== undefined;
+        const isBenchmark = point.name === benchmarkName;
+        const isAsset = point.name && !isStrategy && !isBenchmark;
+        const title = point.name || 'Random Portfolio';
+        const style = isStrategy && point.method ? METHOD_STYLES[point.method] : null;
+
+        return (
+            <Paper
+                sx={{
+                    p: 2,
+                    bgcolor: 'rgba(15, 23, 42, 0.98)',
+                    border: '1px solid',
+                    borderColor: style ? `${style.color}50` : 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(20px)',
+                    boxShadow: style ? `0 8px 32px ${style.glow}` : '0 8px 32px rgba(0,0,0,0.4)',
+                    minWidth: 200,
+                }}
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                    {style && (
+                        <Box sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: '50%',
+                            bgcolor: style.color,
+                            boxShadow: `0 0 12px ${style.color}`
+                        }} />
+                    )}
+                    {isAsset && (
+                        <Box sx={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            bgcolor: '#94A3B8'
+                        }} />
+                    )}
+                    {isBenchmark && (
+                        <Box sx={{
+                            width: 10,
+                            height: 10,
+                            bgcolor: '#fff',
+                            transform: 'rotate(45deg)'
+                        }} />
+                    )}
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: style?.color || '#fff' }}>
+                        {title}
+                    </Typography>
+                    {isStrategy && (
+                        <Chip
+                            label="Strategy"
+                            size="small"
+                            sx={{
+                                height: 18,
+                                fontSize: '0.6rem',
+                                bgcolor: `${style?.color}20`,
+                                color: style?.color,
+                            }}
+                        />
+                    )}
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                    <Box>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', fontSize: '0.65rem' }}>
+                            RETURN (CAGR)
+                        </Typography>
+                        <Typography variant="body2" sx={{
+                            fontWeight: 700,
+                            fontFamily: 'monospace',
+                            color: point.y >= 0 ? '#10B981' : '#EF4444'
+                        }}>
+                            {point.y >= 0 ? '+' : ''}{point.y.toFixed(2)}%
+                        </Typography>
+                    </Box>
+                    <Box>
+                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', fontSize: '0.65rem' }}>
+                            VOLATILITY
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                            {point.x.toFixed(2)}%
+                        </Typography>
+                    </Box>
+                </Box>
+
+                {(isStrategy || isBenchmark) && point.sharpe !== undefined && (
+                    <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                            <Box>
+                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                                    SHARPE
+                                </Typography>
+                                <Typography variant="body2" sx={{
+                                    fontWeight: 700,
+                                    fontFamily: 'monospace',
+                                    color: point.sharpe > 1 ? '#10B981' : point.sharpe > 0.5 ? '#F59E0B' : '#EF4444'
+                                }}>
+                                    {point.sharpe.toFixed(2)}
+                                </Typography>
+                            </Box>
+                            {isStrategy && point.sortino && (
+                                <Box>
+                                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                                        SORTINO
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#60A5FA' }}>
+                                        {point.sortino.toFixed(2)}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+                        {isStrategy && point.maxDrawdown && (
+                            <Box sx={{ mt: 1 }}>
+                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                                    MAX DRAWDOWN
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#EF4444' }}>
+                                    {point.maxDrawdown.toFixed(2)}%
+                                </Typography>
+                            </Box>
+                        )}
+                    </Box>
+                )}
+            </Paper>
+        );
+    }
+    return null;
+};
+
 const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo(({ data }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [showSimulations, setShowSimulations] = useState(true);
@@ -146,167 +309,10 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
     }
 
     // Custom Tooltip
-    const CustomTooltip = ({ active, payload }: ChartTooltipProps<FrontierPoint>) => {
-        const point = payload?.[0]?.payload;
-        if (active && point) {
-            const isStrategy = point.sharpe !== undefined && point.method !== undefined;
-            const isBenchmark = point.name === data.benchmark_name;
-            const isAsset = point.name && !isStrategy && !isBenchmark;
-            const title = point.name || 'Random Portfolio';
-            const style = isStrategy && point.method ? METHOD_STYLES[point.method] : null;
-
-            return (
-                <Paper
-                    sx={{
-                        p: 2,
-                        bgcolor: 'rgba(15, 23, 42, 0.98)',
-                        border: '1px solid',
-                        borderColor: style ? `${style.color}50` : 'rgba(255,255,255,0.15)',
-                        backdropFilter: 'blur(20px)',
-                        boxShadow: style ? `0 8px 32px ${style.glow}` : '0 8px 32px rgba(0,0,0,0.4)',
-                        minWidth: 200,
-                    }}
-                >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                        {style && (
-                            <Box sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: style.color,
-                                boxShadow: `0 0 12px ${style.color}`
-                            }} />
-                        )}
-                        {isAsset && (
-                            <Box sx={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: '50%',
-                                bgcolor: '#94A3B8'
-                            }} />
-                        )}
-                        {isBenchmark && (
-                            <Box sx={{
-                                width: 10,
-                                height: 10,
-                                bgcolor: '#fff',
-                                transform: 'rotate(45deg)'
-                            }} />
-                        )}
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: style?.color || '#fff' }}>
-                            {title}
-                        </Typography>
-                        {isStrategy && (
-                            <Chip
-                                label="Strategy"
-                                size="small"
-                                sx={{
-                                    height: 18,
-                                    fontSize: '0.6rem',
-                                    bgcolor: `${style?.color}20`,
-                                    color: style?.color,
-                                }}
-                            />
-                        )}
-                    </Box>
-
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', fontSize: '0.65rem' }}>
-                                RETURN (CAGR)
-                            </Typography>
-                            <Typography variant="body2" sx={{
-                                fontWeight: 700,
-                                fontFamily: 'monospace',
-                                color: point.y >= 0 ? '#10B981' : '#EF4444'
-                            }}>
-                                {point.y >= 0 ? '+' : ''}{point.y.toFixed(2)}%
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', fontSize: '0.65rem' }}>
-                                VOLATILITY
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
-                                {point.x.toFixed(2)}%
-                            </Typography>
-                        </Box>
-                    </Box>
-
-                    {(isStrategy || isBenchmark) && point.sharpe !== undefined && (
-                        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                                <Box>
-                                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
-                                        SHARPE
-                                    </Typography>
-                                    <Typography variant="body2" sx={{
-                                        fontWeight: 700,
-                                        fontFamily: 'monospace',
-                                        color: point.sharpe > 1 ? '#10B981' : point.sharpe > 0.5 ? '#F59E0B' : '#EF4444'
-                                    }}>
-                                        {point.sharpe.toFixed(2)}
-                                    </Typography>
-                                </Box>
-                                {isStrategy && point.sortino && (
-                                    <Box>
-                                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
-                                            SORTINO
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#60A5FA' }}>
-                                            {point.sortino.toFixed(2)}
-                                        </Typography>
-                                    </Box>
-                                )}
-                            </Box>
-                            {isStrategy && point.maxDrawdown && (
-                                <Box sx={{ mt: 1 }}>
-                                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
-                                        MAX DRAWDOWN
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#EF4444' }}>
-                                        {point.maxDrawdown.toFixed(2)}%
-                                    </Typography>
-                                </Box>
-                            )}
-                        </Box>
-                    )}
-                </Paper>
-            );
-        }
-        return null;
-    };
 
     // Custom star shape for strategies
-    const StrategyStar = (props: ChartShapeProps<{ method?: string }>) => {
-        const { cx, cy, payload } = props;
-        const style = METHOD_STYLES[payload?.method ?? ''] || METHOD_STYLES.hrp;
-
-        return (
-            <g>
-                {/* Outer glow */}
-                <circle cx={cx} cy={cy} r={24} fill={style.color} opacity={0.15} />
-                <circle cx={cx} cy={cy} r={16} fill={style.color} opacity={0.3} />
-                {/* Main point */}
-                <circle cx={cx} cy={cy} r={10} fill={style.color} stroke="#fff" strokeWidth={2} />
-                {/* Inner dot */}
-                <circle cx={cx} cy={cy} r={3} fill="#fff" />
-            </g>
-        );
-    };
 
     // Asset shape
-    const AssetDot = (props: ChartShapeProps<{ name?: string }>) => {
-        const { cx, cy, payload } = props;
-        return (
-            <g>
-                <circle cx={cx} cy={cy} r={6} fill="#64748B" stroke="#94A3B8" strokeWidth={1.5} opacity={0.9} />
-                <text x={cx} y={(cy ?? 0) - 12} textAnchor="middle" fill="#94A3B8" fontSize={9} fontWeight={600}>
-                    {payload?.name}
-                </text>
-            </g>
-        );
-    };
 
     return (
         <Paper
@@ -528,7 +534,7 @@ const EfficientFrontierChart: React.FC<EfficientFrontierChartProps> = React.memo
                                 </YAxis>
 
                                 <ZAxis type="number" dataKey="z" range={[15, 250]} />
-                                <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.15)' }} />
+                                <Tooltip content={<CustomTooltip benchmarkName={data.benchmark_name} />} cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.15)' }} />
                                 <Legend
                                     wrapperStyle={{ paddingTop: 20 }}
                                     formatter={(value) => <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>{value}</span>}
