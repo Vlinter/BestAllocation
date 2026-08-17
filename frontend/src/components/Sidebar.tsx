@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Box,
     TextField,
@@ -79,7 +79,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     const [rebalancingWindow, setRebalancingWindow] = useState(63);
     const [transactionCostBps, setTransactionCostBps] = useState(10);
     const [minWeight, setMinWeight] = useState(0);
-    const [maxWeight, setMaxWeight] = useState(25); // Default: Diversified (1.5x equal weight for 6 tickers)
+    // Max weight is DERIVED from the ticker count (1.5x equal weight, rounded to
+    // 5%) until the user overrides it. It used to be state kept in sync by an
+    // effect, which silently overwrote a manual choice on every ticker added or
+    // removed — and re-rendered twice to do it.
+    const [maxWeightOverride, setMaxWeightOverride] = useState<number | null>(null);
     // Benchmark settings
     const [benchmarkType, setBenchmarkType] = useState<'equal_weight' | 'custom'>('custom');
     const [benchmarkTicker, setBenchmarkTicker] = useState('SPY');
@@ -88,18 +92,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
     const [targetVolatility, setTargetVolatility] = useState(12); // 12%
     const [cvarConfidence, setCvarConfidence] = useState(95); // 95%
 
-    // Max weight follows the ticker count (1.5x equal weight) until the user
-    // sets it themselves — it used to silently overwrite a manual choice on
-    // every ticker added or removed.
-    const [maxWeightTouched, setMaxWeightTouched] = useState(false);
-    useEffect(() => {
-        if (maxWeightTouched) return;
-        const n = tickers.length;
-        if (n > 0) {
-            const recommendedMax = Math.min(100, Math.ceil((100 / n) * 1.5 / 5) * 5);
-            setMaxWeight(recommendedMax);
-        }
-    }, [tickers.length, maxWeightTouched]);
+    const recommendedMax = useMemo(
+        () => (tickers.length > 0 ? Math.min(100, Math.ceil((100 / tickers.length) * 1.5 / 5) * 5) : 25),
+        [tickers.length]
+    );
+    const maxWeight = maxWeightOverride ?? recommendedMax;
 
     // Custom toggle states
     const [isCustomTraining, setIsCustomTraining] = useState(false);
@@ -531,34 +528,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onOptimize, isLoading, error, isFulls
                         type="number"
                         label="Max %"
                         value={maxWeight}
-                        onChange={(e) => { setMaxWeightTouched(true); setMaxWeight(Math.max(Number(e.target.value), minWeight)); }}
+                        onChange={(e) => setMaxWeightOverride(Math.max(Number(e.target.value), minWeight))}
                         fullWidth
                         InputProps={{ inputProps: { min: LIMITS.maxWeight.min, max: LIMITS.maxWeight.max } }}
                     />
                 </Box>
                 <Box sx={{ display: 'flex', gap: { xs: 1, md: 0.5 }, mt: 0.5, flexWrap: 'wrap' }}>
-                    {(() => {
-                        // Dynamic Diversification Cap: 1.5x Equal Weight (1/N)
-                        // Rounding to nearest 5% for cleaner UI
-                        const n = tickers.length;
-                        const recommendedMax = n > 0 ? Math.min(100, Math.ceil((100 / n) * 1.5 / 5) * 5) : 25;
-
-                        return (
-                            <Chip
-                                label={`Diversified (Max ${recommendedMax}%)`}
-                                size="small"
-                                onClick={() => { setMinWeight(0); setMaxWeight(recommendedMax); setMaxWeightTouched(false); }}
-                                clickable
-                                variant={maxWeight === recommendedMax ? "filled" : "outlined"}
-                                color="primary"
-                                sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
-                            />
-                        );
-                    })()}
+                    <Chip
+                        label={`Diversified (Max ${recommendedMax}%)`}
+                        size="small"
+                        onClick={() => { setMinWeight(0); setMaxWeightOverride(null); }}
+                        clickable
+                        variant={maxWeight === recommendedMax ? "filled" : "outlined"}
+                        color="primary"
+                        sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}
+                    />
                     <Chip
                         label="Unconstrained"
                         size="small"
-                        onClick={() => { setMinWeight(0); setMaxWeight(100); setMaxWeightTouched(true); }}
+                        onClick={() => { setMinWeight(0); setMaxWeightOverride(100); }}
                         clickable
                         variant={maxWeight === 100 ? "filled" : "outlined"}
                         sx={{ py: { xs: 1.5, md: 0.5 }, fontSize: { xs: '0.7rem', md: '0.8125rem' } }}

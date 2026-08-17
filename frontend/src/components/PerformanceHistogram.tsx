@@ -35,6 +35,40 @@ const METHOD_COLORS: Record<string, { main: string; light: string }> = {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const CustomTooltip = ({ active, payload }: ChartTooltipProps<HistogramBar>) => {
+    const data = payload?.[0]?.payload;
+    if (!active || !data) return null;
+
+    const value = data.value;
+    const isPositive = value >= 0;
+
+    return (
+        <Box
+            sx={{
+                bgcolor: 'rgba(15, 23, 42, 0.95)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 2,
+                p: 1.5,
+                backdropFilter: 'blur(10px)',
+            }}
+        >
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                {data.label}
+            </Typography>
+            <Typography
+                variant="h6"
+                sx={{
+                    fontWeight: 700,
+                    color: isPositive ? '#10B981' : '#EF4444',
+                    fontFamily: 'monospace'
+                }}
+            >
+                {isPositive ? '+' : ''}{value.toFixed(2)}%
+            </Typography>
+        </Box>
+    );
+};
+
 const PerformanceHistogram: React.FC<PerformanceHistogramProps> = React.memo(({ methods }) => {
     const [selectedMethodIndex, setSelectedMethodIndex] = useState(0);
     const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly');
@@ -66,39 +100,6 @@ const PerformanceHistogram: React.FC<PerformanceHistogramProps> = React.memo(({ 
     }, [method, viewMode]);
 
     // Custom tooltip
-    const CustomTooltip = ({ active, payload }: ChartTooltipProps<HistogramBar>) => {
-        const data = payload?.[0]?.payload;
-        if (!active || !data) return null;
-
-        const value = data.value;
-        const isPositive = value >= 0;
-
-        return (
-            <Box
-                sx={{
-                    bgcolor: 'rgba(15, 23, 42, 0.95)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 2,
-                    p: 1.5,
-                    backdropFilter: 'blur(10px)',
-                }}
-            >
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    {data.label}
-                </Typography>
-                <Typography
-                    variant="h6"
-                    sx={{
-                        fontWeight: 700,
-                        color: isPositive ? '#10B981' : '#EF4444',
-                        fontFamily: 'monospace'
-                    }}
-                >
-                    {isPositive ? '+' : ''}{value.toFixed(2)}%
-                </Typography>
-            </Box>
-        );
-    };
 
     return (
         <Paper

@@ -16,6 +16,32 @@ const COLORS = [
     '#F472B6', '#60A5FA', '#34D399', '#FB923C', '#CBD5E1',
 ];
 
+// Module scope so React keeps one component type across renders; Recharts
+// clones the `content` element with its own props, so `showPercentage` survives.
+const CustomTooltip = ({ active, payload, label, showPercentage = true }:
+    ChartTooltipProps & { showPercentage?: boolean }) => {
+    if (active && payload && payload.length) {
+        return (
+            <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                    {label}
+                </Typography>
+                {payload.map((entry, index) => (
+                    <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                        <Typography variant="body2" sx={{ color: entry.color }}>
+                            {entry.name}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {showPercentage ? `${(entry.value ?? 0).toFixed(1)}%` : (entry.value ?? 0).toFixed(4)}
+                        </Typography>
+                    </Box>
+                ))}
+            </Paper>
+        );
+    }
+    return null;
+};
+
 const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo(({
     allocationHistory,
     tickers,
@@ -46,29 +72,6 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
             return dataPoint;
         });
     }, [allocationHistory, tickers, showPercentage]);
-
-    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-        if (active && payload && payload.length) {
-            return (
-                <Paper sx={{ p: 1.5, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                        {label}
-                    </Typography>
-                    {payload.map((entry, index) => (
-                        <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                            <Typography variant="body2" sx={{ color: entry.color }}>
-                                {entry.name}
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                {showPercentage ? `${(entry.value ?? 0).toFixed(1)}%` : (entry.value ?? 0).toFixed(4)}
-                            </Typography>
-                        </Box>
-                    ))}
-                </Paper>
-            );
-        }
-        return null;
-    };
 
     return (
         <Paper sx={{ p: 3 }}>
@@ -105,7 +108,7 @@ const AllocationHistoryChart: React.FC<AllocationHistoryChartProps> = React.memo
                         domain={showPercentage ? [0, 100] : [0, 1]}
                         allowDataOverflow={true}
                     />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={<CustomTooltip showPercentage={showPercentage} />} />
                     <Legend />
                     {/* Render Fallback (Defensive Mode) Zones - Grouped by Blocks */}
                     {(() => {

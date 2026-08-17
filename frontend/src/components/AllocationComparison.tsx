@@ -19,6 +19,36 @@ const METHOD_DETAILS: Record<string, { label: string; color: string }> = {
     cla: { label: 'CLA', color: '#F472B6' },
 };
 
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
+    if (active && payload && payload.length) {
+        return (
+            <Paper
+                sx={{
+                    p: 2,
+                    bgcolor: 'rgba(23, 23, 23, 0.95)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                }}
+            >
+                <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>{label}</Typography>
+                {payload.map((entry) => (
+                    <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: entry.fill }} />
+                        <Typography variant="body2" sx={{ color: '#ccc', minWidth: 60 }}>
+                            {METHOD_DETAILS[entry.name ?? '']?.label.split(' ')[0] || entry.name}:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#fff' }}>
+                            {(entry.value ?? 0).toFixed(1)}%
+                        </Typography>
+                    </Box>
+                ))}
+            </Paper>
+        );
+    }
+    return null;
+};
+
 const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ methods, date }) => {
 
     // Transform data for the Bar Chart
@@ -68,35 +98,6 @@ const AllocationComparison: React.FC<AllocationComparisonProps> = React.memo(({ 
     }, [methods]);
 
     // Custom Tooltip
-    const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-        if (active && payload && payload.length) {
-            return (
-                <Paper
-                    sx={{
-                        p: 2,
-                        bgcolor: 'rgba(23, 23, 23, 0.95)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        backdropFilter: 'blur(10px)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                    }}
-                >
-                    <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>{label}</Typography>
-                    {payload.map((entry) => (
-                        <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: entry.fill }} />
-                            <Typography variant="body2" sx={{ color: '#ccc', minWidth: 60 }}>
-                                {METHOD_DETAILS[entry.name ?? '']?.label.split(' ')[0] || entry.name}:
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#fff' }}>
-                                {(entry.value ?? 0).toFixed(1)}%
-                            </Typography>
-                        </Box>
-                    ))}
-                </Paper>
-            );
-        }
-        return null;
-    };
 
     return (
         <Paper

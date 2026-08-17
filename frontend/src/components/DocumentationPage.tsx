@@ -43,51 +43,58 @@ interface DocumentationPageProps {
     onClose: () => void;
 }
 
+// Presentational helpers, at module scope. Declared inside the page component
+// they were a fresh component type on every render, so React remounted every
+// one of their subtrees instead of updating it — 29 call sites in this file.
+// None of them reads anything from the page's scope, so hoisting is free.
+
+const SectionTitle = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {icon}
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{title}</Typography>
+    </Box>
+);
+
+const Formula = ({ children }: { children: string }) => (
+    <Box
+        component="code"
+        sx={{
+            display: 'block',
+            bgcolor: 'rgba(0,0,0,0.3)',
+            p: 2,
+            borderRadius: 1,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '0.85rem',
+            my: 1,
+            overflowX: 'auto',
+        }}
+    >
+        {children}
+    </Box>
+);
+
+const INFO_BOX_STYLES = {
+    info: { bg: 'rgba(96, 165, 250, 0.1)', border: 'rgba(96, 165, 250, 0.3)', color: '#60A5FA', Icon: InfoIcon },
+    warning: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.3)', color: '#F59E0B', Icon: WarningIcon },
+    success: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', color: '#10B981', Icon: CheckIcon },
+} as const;
+
+const InfoBox = ({ type, children }: { type: keyof typeof INFO_BOX_STYLES; children: React.ReactNode }) => {
+    const { bg, border, color, Icon } = INFO_BOX_STYLES[type];
+    return (
+        <Paper sx={{ p: 2, my: 2, bgcolor: bg, border: `1px solid ${border}`, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+            <Icon sx={{ color }} />
+            <Box>{children}</Box>
+        </Paper>
+    );
+};
+
 const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) => {
     const [expanded, setExpanded] = useState<string | false>('panel1');
     const [isFullscreen, setIsFullscreen] = useState(false);
 
     const handleChange = (panel: string) => (_event: React.SyntheticEvent, isExpanded: boolean) => {
         setExpanded(isExpanded ? panel : false);
-    };
-
-    const SectionTitle = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            {icon}
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{title}</Typography>
-        </Box>
-    );
-
-    const Formula = ({ children }: { children: string }) => (
-        <Box
-            component="code"
-            sx={{
-                display: 'block',
-                bgcolor: 'rgba(0,0,0,0.3)',
-                p: 2,
-                borderRadius: 1,
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '0.85rem',
-                my: 1,
-                overflowX: 'auto',
-            }}
-        >
-            {children}
-        </Box>
-    );
-
-    const InfoBox = ({ type, children }: { type: 'info' | 'warning' | 'success'; children: React.ReactNode }) => {
-        const colors = {
-            info: { bg: 'rgba(96, 165, 250, 0.1)', border: 'rgba(96, 165, 250, 0.3)', icon: <InfoIcon sx={{ color: '#60A5FA' }} /> },
-            warning: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.3)', icon: <WarningIcon sx={{ color: '#F59E0B' }} /> },
-            success: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', icon: <CheckIcon sx={{ color: '#10B981' }} /> },
-        };
-        return (
-            <Paper sx={{ p: 2, my: 2, bgcolor: colors[type].bg, border: `1px solid ${colors[type].border}`, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                {colors[type].icon}
-                <Box>{children}</Box>
-            </Paper>
-        );
     };
 
     return (
