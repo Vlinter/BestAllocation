@@ -25,7 +25,7 @@ BestAllocation is a full-stack web application that compares three portfolio all
 - **EMA expected returns** (recency-weighted, dynamic span),
 - **James-Stein-style shrinkage** of expected returns towards the grand mean (fixed intensity λ = 0.5),
 - **Ledoit-Wolf covariance shrinkage** (2004),
-- **Go-to-Cash** when every expected return is below the risk-free rate,
+- **Go-to-Cash** when no portfolio *admissible under your weight bounds* beats the risk-free rate — the bar is the best reachable return, not the best single asset, because a 25% cap forces you to hold at least four names,
 - **Graceful fallback to cash** if the convex solver fails,
 - **Box constraints** (min/max weight per asset).
 
@@ -118,7 +118,7 @@ pip install -r backend/requirements-dev.txt
 pytest backend -q                  # offline — no API keys needed
 ```
 
-**67 tests**, all offline. A few carry most of the weight:
+**70 tests**, all offline. A few carry most of the weight:
 
 - a discriminating tail-risk test — on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50);
 - the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows);

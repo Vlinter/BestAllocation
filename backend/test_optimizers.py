@@ -9,10 +9,13 @@ import sys
 import os
 import pandas as pd
 import numpy as np
+import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from backend.optimization import optimize_hrp, optimize_with_fallback, shrink_expected_returns
+from backend.optimization import (
+    optimize_hrp, optimize_with_fallback, shrink_expected_returns, max_feasible_return
+)
 from backend.config import RETURN_SHRINKAGE_INTENSITY
 
 
@@ -153,6 +156,80 @@ def test_mvo_cash_fallback():
 
     result = optimize_with_fallback(df, method="mvo", risk_free_rate=0.05)
     assert sum(result.weights.values()) < 0.01, "should be 100% cash"
+
+
+def test_max_feasible_return_is_the_greedy_lp_solution():
+    """Floors for everyone, then the remaining budget into the best names."""
+    mu = pd.Series({'A': 0.10, 'B': 0.05, 'C': 0.00, 'D': -0.05, 'E': -0.10, 'F': -0.20})
+
+    # 25% cap, no floor: forced to hold four names -> the top four, 25% each.
+    assert max_feasible_return(mu, 0.0, 0.25) == pytest.approx(
+        (0.10 + 0.05 + 0.00 - 0.05) / 4)
+
+    # No cap at all: everything into the single best asset.
+    assert max_feasible_return(mu, 0.0, 1.0) == pytest.approx(0.10)
+
+    # 10% floor everywhere leaves 40% to distribute, 40% headroom per name:
+    # the floors, plus the whole remainder on A.
+    assert max_feasible_return(mu, 0.10, 0.50) == pytest.approx(
+        0.10 * float(mu.sum()) + 0.40 * 0.10)
+
+    # Unsatisfiable boxes: floors overshoot, or caps cannot fill the budget.
+    assert max_feasible_return(mu, 0.30, 0.50) is None      # 6 x 30% = 180%
+    assert max_feasible_return(mu, 0.0, 0.10) is None       # 6 x 10% = 60%
+
+
+def test_mvo_goes_to_cash_when_the_bounds_make_every_portfolio_lose_to_cash():
+    """
+    The regression this guard exists for. With a 25% cap the optimizer must
+    hold at least four names, so one attractive asset cannot carry the
+    portfolio: max(mu) sits above the risk-free rate while every admissible
+    combination sits below it.
+
+    max_sharpe's Charnes-Cooper transform needs a feasible w with
+    (mu - rf) @ w > 0, so it had no solution and CVXPY reported "infeasible" —
+    recorded as a solver failure on 6 of 77 rebalances of the default universe.
+    The weights were cash either way; the label was wrong.
+    """
+    np.random.seed(7)
+    n = 500
+    dates = pd.date_range("2020-01-01", periods=n)
+    drifts = [0.0006, -0.0004, -0.0004, -0.0004, -0.0004, -0.0004]  # one winner, five losers
+    df = pd.DataFrame(
+        {chr(65 + i): np.random.normal(d, 0.008, n) for i, d in enumerate(drifts)},
+        index=dates,
+    )
+
+    result = optimize_with_fallback(
+        df, method="mvo", risk_free_rate=0.03, min_weight=0.0, max_weight=0.25)
+
+    assert sum(result.weights.values()) < 1e-9, "should be fully in cash"
+    assert result.fallback_used is False, "this is a decision, not a solver failure"
+    assert result.fallback_reason is None
+
+    # Unconstrained, the same universe is investable: the guard is about the
+    # bounds, it does not blanket-refuse whenever some assets are unattractive.
+    free = optimize_with_fallback(
+        df, method="mvo", risk_free_rate=0.03, min_weight=0.0, max_weight=1.0)
+    assert sum(free.weights.values()) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_mvo_reports_infeasible_bounds_as_such():
+    """Two assets capped at 10% each cannot add up to a portfolio."""
+    np.random.seed(8)
+    n = 300
+    dates = pd.date_range("2021-01-01", periods=n)
+    df = pd.DataFrame({
+        'A': np.random.normal(0.0008, 0.01, n),
+        'B': np.random.normal(0.0006, 0.012, n),
+    }, index=dates)
+
+    result = optimize_with_fallback(
+        df, method="mvo", risk_free_rate=0.02, min_weight=0.0, max_weight=0.10)
+
+    assert sum(result.weights.values()) < 1e-9
+    assert result.fallback_used is True
+    assert "infeasible" in (result.fallback_reason or "").lower()
 
 
 def test_cvar_constraints():
