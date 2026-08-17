@@ -91,6 +91,38 @@ def safe_clean_weights(weights: Dict[str, float]) -> Dict[str, float]:
     return cleaned
 
 
+def max_feasible_return(mu: pd.Series, min_weight: float, max_weight: float) -> Optional[float]:
+    """
+    Highest expected return reachable by a long-only portfolio that satisfies
+    min_weight <= w_i <= max_weight and sums to 1.
+
+    Closed form, no solver: give every asset its floor, then pour the remaining
+    budget into the best assets in order until each hits its cap. That is the
+    greedy solution of the underlying linear program, and it is exact.
+
+    Returns None when the box constraints admit no portfolio at all —
+    n * min_weight > 1 (the floors alone overshoot the budget) or
+    n * max_weight < 1 (the caps cannot absorb it).
+    """
+    n = len(mu)
+    if n == 0:
+        return None
+    if n * min_weight > 1.0 + 1e-9 or n * max_weight < 1.0 - 1e-9:
+        return None
+
+    weights = np.full(n, float(min_weight))
+    remaining = 1.0 - n * min_weight
+    headroom = max_weight - min_weight
+    if headroom > 0:
+        for idx in np.argsort(mu.values)[::-1]:
+            if remaining <= 1e-12:
+                break
+            add = min(headroom, remaining)
+            weights[idx] += add
+            remaining -= add
+    return float(weights @ mu.values)
+
+
 def check_covariance_quality(cov_matrix: pd.DataFrame) -> Optional[str]:
     """Check if covariance matrix is well-conditioned."""
     try:
@@ -303,9 +335,38 @@ def optimize_with_fallback(
              if quality_warning:
                  logger.warning(f"MVO covariance quality: {quality_warning}")
 
-             # Cash Strategy: If the best asset return < Risk Free Rate, go to Cash
-             if mu.max() < risk_free_rate:
-                 logger.info(f"MVO: Max expected return ({mu.max():.2%}) < Risk Free ({risk_free_rate:.2%}). Going to Cash.")
+             # Cash Strategy. The bar is the best return REACHABLE under the
+             # weight bounds, not the best single asset. With a 25% cap you are
+             # forced to hold at least four names, so max(mu) can sit well above
+             # the risk-free rate while every admissible portfolio sits below it.
+             #
+             # That gap is exactly where max_sharpe used to break: its
+             # Charnes-Cooper transform needs a feasible w with (mu - rf) @ w > 0,
+             # which exists if and only if this reachable maximum beats rf. When
+             # it does not, CVXPY reported "infeasible" and the run was recorded
+             # as a solver failure — six of 77 rebalances on the default universe,
+             # every one of them this case, none of them a numerical problem. The
+             # honest answer was always "nothing admissible here beats cash".
+             reachable = max_feasible_return(mu, min_weight, max_weight)
+
+             if reachable is None:
+                 # The bounds themselves are unsatisfiable (e.g. 2 assets capped
+                 # at 10% each). A user-configuration problem, not a market call.
+                 n_assets = len(returns.columns)
+                 return OptimizationResult(
+                     weights={col: 0.0 for col in returns.columns},
+                     fallback_used=True,
+                     fallback_reason=(
+                         f"Weight bounds are infeasible for {n_assets} assets "
+                         f"(min={min_weight:.0%}, max={max_weight:.0%}) -> Cash"
+                     ),
+                 )
+
+             if reachable <= risk_free_rate:
+                 logger.info(
+                     f"MVO: best reachable return under the weight bounds "
+                     f"({reachable:.2%}) <= Risk Free ({risk_free_rate:.2%}). Going to Cash."
+                 )
                  zero_weights = {col: 0.0 for col in returns.columns}
                  return OptimizationResult(weights=zero_weights, fallback_used=False)
 

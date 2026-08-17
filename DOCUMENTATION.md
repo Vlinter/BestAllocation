@@ -209,14 +209,26 @@ où:
 
 ##### 4. Stratégie Cash (Go-to-Cash)
 
-**Problème:** Si tous les actifs ont un rendement attendu inférieur au taux sans risque, forcer une allocation à 100% invested n'a pas de sens économique.
+**Problème:** Si aucun portefeuille admissible ne bat le taux sans risque, forcer une allocation à 100% invested n'a pas de sens économique.
 
 **Solution:** 
 
 ```python
-if max(μ) < risk_free_rate:
-    weights = {asset: 0.0 for asset in assets}  # → 100% Cash
+# Le seuil est le meilleur rendement ATTEIGNABLE sous les contraintes de poids,
+# pas le meilleur actif seul (voir optimization.max_feasible_return).
+if max_feasible_return(μ, min_weight, max_weight) <= risk_free_rate:
+    weights = {asset: 0.0 for asset in assets}  # → décision Cash
 ```
+
+> **Pourquoi pas `max(μ) < rf` ?** Avec un plafond à 25 % l'optimiseur est *obligé*
+> de détenir au moins 4 actifs : le meilleur rendement réellement atteignable est la
+> moyenne des 4 meilleurs, pas le meilleur actif. Sur l'univers par défaut, `max(μ)`
+> dépasse le taux sans risque alors que **tout** portefeuille admissible est en dessous
+> pendant 11 rebalancements sur 77. Le transform de Charnes-Cooper de `max_sharpe`
+> exige un `w` admissible avec `(μ − rf)·w > 0` — il n'en existe pas — et CVXPY
+> répondait « infeasible » : 6 de ces 11 périodes étaient donc comptabilisées comme
+> des **échecs de solveur** alors que la bonne réponse était « rien ici ne bat le cash ».
+> Les poids étaient les mêmes (cash) dans les deux cas ; seule l'étiquette était fausse.
 
 **Comportement:**
 - L'optimiseur retourne des poids à 0
