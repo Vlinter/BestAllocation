@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 import type { CompareResponse, MethodResult, PerformanceMetrics } from '../api/client';
 
-interface RankingEntry {
+export interface RankingEntry {
     method: MethodResult;
     wins: number;
     winningMetrics: string[];
 }
 
-interface GlobalRanking {
+export interface GlobalRanking {
     ranking: RankingEntry[];
     totalMetrics: number;
 }

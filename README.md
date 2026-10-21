@@ -66,6 +66,26 @@ A ranking without error bars is a coin toss with decimals. Once the three strate
 
 The rank-IC used to be the *only* overfitting diagnostic. It is now reported with its ceiling — which turns out to be **nil** on 63-day windows: an annualized Sharpe estimated over one holding period carries a sampling error of ≈ ±2.0, while the observed dispersion across periods is 1.86-1.99. A ρ near zero was never evidence of overfitting; it was evidence that the test could not resolve anything.
 
+## 📤 Exporting a run
+
+The dashboard header carries an **Export** control, active as soon as a comparison has finished.
+
+- **Copy for AI** (one click) puts the whole run on the clipboard as a single Markdown report,
+  meant to be pasted into a conversation with an LLM: run configuration, data coverage and
+  warnings, the full metric table, every significance test, and *the data behind each chart* as
+  tables — equity and drawdown curves, rolling Sharpe, calendar and monthly returns, stress
+  tests, current and historical allocations, correlations, the efficient frontier and the
+  predicted-vs-realized Sharpe diagnostic. Units are spelled out in a "How to read" preamble,
+  and any series thinned for size says so with both counts (an assistant cannot see the caveats
+  the UI prints next to a number).
+- **Download report (.md)** is the same report as a file.
+- **Download raw data (.json)** is the untouched API payload plus the request that produced it,
+  for anything that would rather recompute than read.
+
+Statistics are never recomputed from a sampled table: the report carries the numbers the backend
+computed on the full daily series, and the sampled curves are there for shape only
+(`frontend/src/utils/exportReport.ts`).
+
 ## 🏗️ Architecture
 
 ```

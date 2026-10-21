@@ -17,6 +17,7 @@ function App() {
     results,
     error,
     runOptimization,
+    runParams,
   } = useOptimization();
 
   const globalRanking = useRanking(results);
@@ -43,6 +44,8 @@ function App() {
         isLoading={isLoading}
         error={error}
         results={results}
+        runParams={runParams}
+        globalRanking={globalRanking}
         onOptimize={handleOptimize}
         sidebarMode={sidebarMode}
         setSidebarMode={setSidebarMode}

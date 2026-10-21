@@ -25,6 +25,13 @@ interface UseOptimizationReturn {
     results: CompareResponse | null;
     error: string | null;
     runOptimization: (params: OptimizationParams) => Promise<void>;
+    /**
+     * The parameters behind `results`, for the export report: it states the
+     * configuration next to the numbers, and the response does not echo it.
+     * Committed only when a run completes, so a failed attempt never
+     * relabels the results still on screen.
+     */
+    runParams: OptimizationParams | null;
 }
 
 /** One entry of FastAPI's 422 payload. */
@@ -74,8 +81,10 @@ export function useOptimization(): UseOptimizationReturn {
     const [loadingMessage, setLoadingMessage] = useState("Initializing...");
     const [error, setError] = useState<string | null>(null);
     const [results, setResults] = useState<CompareResponse | null>(null);
+    const [runParams, setRunParams] = useState<OptimizationParams | null>(null);
 
     const isMounted = useRef(true);
+    const requestedParams = useRef<OptimizationParams | null>(null);
 
     useEffect(() => {
         isMounted.current = true;
@@ -89,6 +98,7 @@ export function useOptimization(): UseOptimizationReturn {
         setLoadingProgress(0);
         setLoadingMessage("Starting Job...");
         setError(null);
+        requestedParams.current = params;
 
         try {
             // 1. Start Job
@@ -135,6 +145,7 @@ export function useOptimization(): UseOptimizationReturn {
 
                     if (status.status === 'completed' && status.result) {
                         setResults(status.result);
+                        setRunParams(requestedParams.current);
                         // Allow 100% to be seen for a moment
                         setTimeout(() => setIsLoading(false), 800);
                         isPolling = false;
@@ -171,5 +182,6 @@ export function useOptimization(): UseOptimizationReturn {
         results,
         error,
         runOptimization,
+        runParams,
     };
 }

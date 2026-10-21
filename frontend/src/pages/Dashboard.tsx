@@ -2,6 +2,7 @@ import React, { useState, lazy, Suspense } from 'react';
 import { Box, Tabs, Tab, Alert, AlertTitle, Paper, Typography } from '@mui/material';
 import { Dashboard as DashboardIcon, ShowChart, Shield, PieChart, Science, EmojiEvents as TrophyIcon, Warning as WarningIcon } from '@mui/icons-material';
 import type { CompareResponse, MethodResult } from '../api/client';
+import type { GlobalRanking, RankingEntry } from '../hooks/useRanking';
 import { colorOf } from '../theme/strategies';
 import {
     DataInfoCard,
@@ -27,17 +28,6 @@ const PerformanceHistogram = lazy(() => import('../components/PerformanceHistogr
 const RebalancerCard = lazy(() => import('../components/RebalancerCard'));
 const RollingSharpeChart = lazy(() => import('../components/RollingSharpeChart'));
 const StressTestCard = lazy(() => import('../components/StressTestCard'));
-
-interface RankingEntry {
-    method: MethodResult;
-    wins: number;
-    winningMetrics: string[];
-}
-
-interface GlobalRanking {
-    ranking: RankingEntry[];
-    totalMetrics: number;
-}
 
 interface DashboardProps {
     results: CompareResponse | null;
