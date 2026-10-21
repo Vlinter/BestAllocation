@@ -344,6 +344,10 @@ def fetch_risk_free_rate_history(start_date: Optional[str] = None, end_date: Opt
     """
     Fetch historical 3-Month Treasury Bill rates from FRED.
     Returns Series of daily annualized rates as decimals (e.g. 0.045).
+
+    Callers that know the backtest window must pass it: the floor below is a
+    last resort, and a run starting before it silently falls back to a constant
+    rate for its early years (see routes.run_comparison_job).
     """
     if start_date is None:
         start_date = "2010-01-01"

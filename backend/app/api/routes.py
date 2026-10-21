@@ -272,8 +272,6 @@ def run_comparison_job(job_id: str, request: CompareRequest):
 
         # 1. Setup & Data Fetching
         rf_rate_current = get_risk_free_rate()
-        risk_free_rate_series = fetch_risk_free_rate_history(request.start_date, request.end_date)
-        backtest_rf_input = risk_free_rate_series if not risk_free_rate_series.empty else rf_rate_current
 
         tickers = list(request.tickers)  # already normalized (upper/strip) by the schema
 
@@ -281,6 +279,18 @@ def run_comparison_job(job_id: str, request: CompareRequest):
         start_date = request.start_date
 
         prices, open_prices, ticker_start_dates, limiting_ticker = fetch_price_data(tickers, start_date, end_date)
+
+        # The T-Bill history is fetched AFTER the prices, over the window the
+        # data actually covers. Asking for `request.start_date` meant asking for
+        # None whenever the user keeps "Use full history" — the default — and
+        # the provider then floored the window at 2010-01-01. On the default
+        # universe, which starts in 2006, the engine accrued cash at the 4%
+        # fallback for 2006-2009 while every Sharpe used the mean of 2010
+        # onwards: two different risk-free rates inside one run.
+        risk_free_rate_series = fetch_risk_free_rate_history(
+            prices.index[0].strftime("%Y-%m-%d"), end_date
+        )
+        backtest_rf_input = risk_free_rate_series if not risk_free_rate_series.empty else rf_rate_current
 
         trading_days_per_year = infer_trading_frequency(prices.index)
 

@@ -29,7 +29,7 @@ const METRICS_TO_COMPARE: MetricConfig[] = [
     { key: 'calmar_ratio', higherIsBetter: true, label: 'Calmar Ratio' },
     { key: 'alpha', higherIsBetter: true, label: 'Alpha' },
     { key: 'omega_ratio', higherIsBetter: true, label: 'Omega Ratio' },
-    { key: 'win_rate', higherIsBetter: true, label: 'Win Rate' },
+    { key: 'win_rate', higherIsBetter: true, label: 'Win Rate (daily)' },
     { key: 'annualized_turnover', higherIsBetter: false, label: 'Turnover' },
 ];
 
