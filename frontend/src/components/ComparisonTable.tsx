@@ -78,8 +78,8 @@ const metricsConfig: MetricConfig[] = [
         tooltip: 'Ratio of cumulative gains above the risk-free rate to cumulative losses below it. >1 means gains outweigh losses. Unlike Sharpe, it captures the entire return distribution (skewness, kurtosis).'
     },
     {
-        label: 'Win Rate', key: 'win_rate', format: (v) => `${(v * 100).toFixed(1)}%`, higherIsBetter: true,
-        tooltip: 'Percentage of rebalancing periods with positive returns. 50%+ is typical. A high win rate with low average gains can still underperform a low win rate with large average gains.'
+        label: 'Win Rate (daily)', key: 'win_rate', format: (v) => `${(v * 100).toFixed(1)}%`, higherIsBetter: true,
+        tooltip: 'Share of DAYS with a positive return — metrics.py computes it on the daily series, not per rebalancing period, which is what this row used to claim. 50%+ is typical. A high win rate with low average gains can still underperform a low win rate with large average gains.'
     },
     {
         label: 'Annualized Turnover', key: 'annualized_turnover', format: (v) => `${(v * 100).toFixed(0)}%`, higherIsBetter: false,

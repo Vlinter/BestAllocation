@@ -932,7 +932,7 @@ const DocumentationPage: React.FC<DocumentationPageProps> = ({ open, onClose }) 
                         <Paper sx={{ p: 2, bgcolor: 'rgba(255, 255, 255, 0.03)' }}>
                             <Chip label="Other Metrics" sx={{ mb: 1 }} />
                             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-                                • <strong>Win Rate</strong>: % of rebalancing periods with positive returns<br />
+                                • <strong>Win Rate</strong>: % of days with a positive return (daily series, not per rebalancing period)<br />
                                 • <strong>Turnover</strong>: How much trading is required at each rebalance<br />
                                 • <strong>CAGR</strong>: Compound Annual Growth Rate - your smoothed annual return
                             </Typography>

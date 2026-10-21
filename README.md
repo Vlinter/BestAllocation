@@ -142,7 +142,7 @@ pytest backend -q                  # backend — offline, no API keys needed
 cd frontend && npm test            # frontend components (vitest + testing-library)
 ```
 
-**70 backend tests + 29 frontend component tests**, all offline. A few carry most of the weight:
+**77 backend tests + 55 frontend component tests**, all offline. A few carry most of the weight:
 
 - a discriminating tail-risk test — on variance-matched but negatively-skewed synthetic returns, the Min-CVaR optimizer must diverge from closed-form min-variance (it does: ~63/37 vs 50/50);
 - the significance suite is tested **in both directions**: each measure must detect the effect it claims to detect *and* refuse to detect one that is not there (a bootstrap CI must cover zero on two identical series, the PBO must approach 50% on pure noise, the DSR must collapse when the number of trials grows);

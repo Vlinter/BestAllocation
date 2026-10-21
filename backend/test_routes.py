@@ -13,12 +13,14 @@ from fastapi import HTTPException
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from backend.app.api.routes import _run_strategy, downsample_curve
+from backend.app.api import routes
+from backend.app.api.routes import _run_strategy, downsample_curve, run_comparison_job
 from backend.app.core.schemas import CompareRequest
+from backend.app.services.jobs import job_manager
 
 
-def _tiny_market(n_days=80):
-    dates = pd.date_range("2022-01-03", periods=n_days, freq="B")
+def _tiny_market(n_days=80, start="2022-01-03"):
+    dates = pd.date_range(start, periods=n_days, freq="B")
     rng = np.random.default_rng(3)
     close = pd.DataFrame(
         {t: 100 * np.cumprod(1 + rng.normal(0.0003, 0.01, n_days))
@@ -92,3 +94,43 @@ def test_downsample_leaves_short_curves_untouched():
     curve = [{"date": float(i), "value": 1.0} for i in range(120)]
     assert downsample_curve(curve, 500) is curve
     assert downsample_curve([], 500) == []
+
+
+# ============================================================================
+# Risk-free rate window
+# ============================================================================
+
+def test_risk_free_history_covers_the_window_the_prices_actually_span(monkeypatch):
+    """
+    The FRED history used to be fetched BEFORE the prices, from
+    `request.start_date` — which is None as soon as the user keeps "Use full
+    history", and `fetch_risk_free_rate_history` then floored the window at
+    2010-01-01. A backtest starting in 2006 accrued its cash leg at the 4%
+    constant fallback for 2006-2009 while every Sharpe used the mean of 2010
+    onwards: two different risk-free rates inside one run.
+    """
+    close, opens = _tiny_market(400, start="2006-04-28")
+    asked = {}
+
+    def fake_history(start_date=None, end_date=None):
+        # Mimics the provider, floor included, so the old behaviour produces a
+        # usable series and the assertion below is what fails — not the stub.
+        asked["start"] = start_date
+        index = pd.date_range(start_date or "2010-01-01", end_date or "2026-01-01", freq="B")
+        return pd.Series(0.03, index=index)
+
+    monkeypatch.setattr(routes, "fetch_price_data",
+                        lambda *a, **k: (close, opens, {"AAA": "2006-04-28"}, "AAA"))
+    monkeypatch.setattr(routes, "fetch_risk_free_rate_history", fake_history)
+    monkeypatch.setattr(routes, "get_risk_free_rate", lambda: 0.045)
+
+    job_id = job_manager.create_job()
+    run_comparison_job(job_id, CompareRequest(
+        tickers=["AAA", "BBB"], start_date=None, end_date=None,
+        training_window=60, rebalancing_window=21,
+    ))
+
+    job = job_manager.get_job(job_id)
+    assert job["status"] == "completed", job.get("error")
+    # The first traded date, not a hardcoded floor and not None.
+    assert asked["start"] == "2006-04-28"
