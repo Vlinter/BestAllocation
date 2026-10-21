@@ -20,6 +20,7 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as SkeletonLoader } from './SkeletonLoader';
 
 export { default as WelcomeScreen } from './WelcomeScreen';
+export { default as ExportResultsButton } from './ExportResultsButton';
 
 export { default as ReturnsDistributionChart } from './ReturnsDistributionChart';
 export { default as SignificanceCard } from './SignificanceCard';

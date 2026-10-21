@@ -3,14 +3,19 @@ import { Box, IconButton, Tooltip, Typography, Chip } from '@mui/material';
 import { Menu as MenuIcon, Help as HelpIcon, Fullscreen as FullscreenIcon, FullscreenExit as FullscreenExitIcon, Close as CloseIcon } from '@mui/icons-material';
 import Sidebar from '../Sidebar'; // Adjust path if needed
 import AnimatedBackground from '../AnimatedBackground'; // Adjust path if needed
+import ExportResultsButton from '../ExportResultsButton';
 import type { CompareResponse } from '../../api/client';
 import type { OptimizationParams } from '../../hooks/useOptimization';
+import type { GlobalRanking } from '../../hooks/useRanking';
 
 interface MainLayoutProps {
     children: React.ReactNode;
     isLoading: boolean;
     error: string | null;
     results: CompareResponse | null;
+    /** Parameters and ranking of the run on screen — exported with it. */
+    runParams?: OptimizationParams | null;
+    globalRanking?: GlobalRanking | null;
     onOptimize: (params: OptimizationParams) => Promise<void>;
     sidebarMode: 'hidden' | 'normal' | 'fullscreen';
     setSidebarMode: (mode: 'hidden' | 'normal' | 'fullscreen') => void;
@@ -22,6 +27,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     isLoading,
     error,
     results,
+    runParams,
+    globalRanking,
     onOptimize,
     sidebarMode,
     setSidebarMode,
@@ -117,6 +124,19 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                             )}
                         </Box>
                     </Box>
+
+                    {/* One click to take the whole run elsewhere — a conversation
+                        with an LLM, a file, a notebook. Header rather than a tab,
+                        so it is reachable from all five of them. */}
+                    {results && (
+                        <Box sx={{ flexShrink: 0 }}>
+                            <ExportResultsButton
+                                results={results}
+                                params={runParams}
+                                ranking={globalRanking}
+                            />
+                        </Box>
+                    )}
                 </Box>
 
                 {/* Page Content */}
